@@ -76,25 +76,33 @@ function load(url, then, error) {
 
 // end cache/fetch primitives
 
-function loadSubtree(url, container) {
-  container.loadState = 1;
-  load(repo + url, function then(task, data) {
+function loadSubtree(path, container, then) {
+  if (container.loadState !== 'loaded') {
+    container.loadState = 'loading';
+  }
+  load(repo + path, function(task, data) { // then
+    if (container.loadState === 'loaded') {
+      then(task, data);
+      return;
+    }
     var list = container.appendChild(document.createElement('ul'));
     data.forEach(function(item) {
       var li = document.createElement('li');
+      item.element = li; // mutating cached data, woo
       if (item.type === 'dir') {
         li.innerText = '[+] ' + item.name;
-        li.loadState = 0;
+        li.loadState = '';
         li.addEventListener('click', function(e) {
+          if (e.target !== li) return;
           e.stopPropagation();
           switch (li.loadState) {
-            case 0:
-              loadSubtree(item.path, li);
+            case '':
+              loadSubtree(item.path, li, complete);
               break;
-            case 1:
-              console.log(1);
+            case 'loading':
+              console.log('in progress');
               break;
-            case 2:
+            case 'loaded':
               var subtree = li.querySelector('ul');
               if (subtree.style.display === 'none') {
                 subtree.style.display = '';
@@ -109,15 +117,27 @@ function loadSubtree(url, container) {
       }
       list.appendChild(li);
     });
-    container.loadState = 2;
-    complete(task);
-  }, function error(task) {
+    container.loadState = 'loaded';
+    then(task, data);
+  }, function(task) { // error
     document.getElementById('error').innerHTML = 'Error!';
     complete(task);
   });
 }
 
 window.addEventListener('load', function() {
-  loadSubtree('test', document.getElementById('tree'));
+  loadSubtree('test/annexB/built-ins', document.getElementById('tree'), complete);
 });
 
+
+function recur(path, container) {
+  function handleSubtree(task, data) {
+    data.forEach(function(item) {
+      loadSubtree(item.path, item.element, handleSubtree);
+    });
+    complete(task);
+  }
+
+  loadSubtree(path, container, handleSubtree);
+}
+// recur('test/annexB/built-ins', document.getElementById('tree'));
