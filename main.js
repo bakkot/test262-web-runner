@@ -79,6 +79,34 @@ function load(url, then, error, noCache) {
   }, 10));
 }
 
+function loadAll(urls, then, error) {
+  if (urls.length === 0) {
+    then([]);
+    return;
+  }
+  var ok = true;
+  var count = 0;
+  var results = Array(urls.length);
+  urls.forEach(function(url, i) {
+    load(url, function(task, data) {
+      if (ok) {
+        results[i] = data;
+        ++count;
+        if (count === results.length) {
+          then(results);
+        }
+      }
+      complete(task);
+    }, function(task) {
+      if (ok) {
+        ok = false;
+        error();
+      }
+      complete(task);
+    });
+  });
+}
+
 // end cache/fetch primitives
 
 function parseFrontmatter(src) {
@@ -147,19 +175,25 @@ function parseFrontmatter(src) {
   return {includes: includes, flags: flags, negative: negative};
 }
 
+function checkType(errorEvent, global, kind) {
+  if (typeof errorEvent.error === 'object') {
+    return errorEvent.error instanceof global[kind];
+  } else {
+    return !!errorEvent.message.match(kind); // todo more cleverness
+  }
+}
 
-var wait = 50; // ms
-function runTest262Test(src, pass, fail) {
+var errSigil = {};
+function runSources(sources, done) {
   var iframe = document.createElement('iframe');
 
-  iframe.addEventListener('load', function(){
-    var err, timeout;
+  iframe.addEventListener('load', function() {
+    var err = errSigil, timeout;
     var w = iframe.contentWindow;
     w.addEventListener('error', function(e) { err = e; });
-    w.done = function() {
-      console.log(err, err.message, err.error);
-      err = true;
+    w.done = function(){
       clearTimeout(timeout);
+      done(err, w);
       document.body.removeChild(iframe);
     };
 
@@ -168,12 +202,14 @@ function runTest262Test(src, pass, fail) {
       script.text = src;
       w.document.body.appendChild(script);
     }
-    append(src);
+
+    sources.forEach(append);
     append('done();');
 
-    if (err === undefined) {
+    if (err === errSigil) {
       timeout = setTimeout(wait, function() {
-        console.err('done not invoked!');
+        console.error('done not invoked!');
+        done(null);
         document.body.removeChild(iframe);
       });
     }
@@ -184,37 +220,109 @@ function runTest262Test(src, pass, fail) {
   document.body.appendChild(iframe);
 }
 
+function checkErr(negative, pass, fail) {
+  return function(err, w) {
+    if (err === errSigil) {
+      if (negative) {
+        fail('Expecting ' + negative.phase + ' ' + negative.type + ', but no error was thrown.');
+      } else {
+        pass();
+      }
+    } else {
+      if (negative) {
+        if (checkType(err, w, negative.type)) {
+          pass();
+        } else {
+          fail('Expecting ' + negative.phase + ' ' + negative.type + ', but got an error of another kind.');  // todo more precise complaints
+        }
+      } else {
+        fail('Unexpected error: ' + err.message.replace(/^uncaught\W+/i, ''));
+      }
+    }
+  };
+}
+
+function strict(src) {
+  return '"use strict";\n' + src;
+}
+
+var alwaysIncludes = ['assert.js', 'sta.js'];
+var wait = 50; // ms
+function runTest262Test(src, pass, fail) {
+  var meta = parseFrontmatter(src);
+  if (!meta) {
+    fail('Couldn\'t parse frontmatter');
+    return;
+  }
+
+  if (meta.flags.module || meta.flags.raw || meta.flags.async) {
+    // todo
+    fail('Unhandled metadata ' + JSON.stringify(meta));
+    return;
+  }
+
+  if (meta.negative && meta.negative.phase === 'early' && !meta.flags.raw) {
+    src += 'throw new Error("NotEarlyError");\n';
+  }
+
+  loadAll(alwaysIncludes.concat(meta.includes).map(function(include) { return './test262/harness/' + include; }), function(includeSrcs) {
+    if (!meta.flags.strict) {
+      // run in both strict and non-strict.
+      runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
+        runSources(includeSrcs.concat([src]), checkErr(meta.negative, pass, fail));
+      }, fail));
+    } else {
+      runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), checkErr(meta.negative, pass, fail));
+    }
+  }, function() {
+    fail('Error loading test data.');
+  });
+}
+
+function runSingle(url) {
+  load(url, function(task, data) {
+    runTest262Test(data, function() {
+      console.log('Pass!');
+    }, function(msg) {
+      console.error('Fail', msg);
+    });
+    complete(task);
+  }, function(task) {
+    console.error('Load failed.');
+    complete(task);
+  });
+}
 
 // end runner primitive
 
 
-function walk(list, path, file, dir) {
-  // functions are called on children before parents
-  list.forEach(function(item) {
-    if (item.type === 'file') {
-      file(path + item.name);
-    } else {
-      walk(item.files, path + item.name + '/', file, dir);
-      dir(path + item.name + '/');
-    }
-  });
-}
+// function walk(list, path, file, dir) {
+//   // functions are called on children before parents
+//   list.forEach(function(item) {
+//     if (item.type === 'file') {
+//       file(path + item.name);
+//     } else {
+//       walk(item.files, path + item.name + '/', file, dir);
+//       dir(path + item.name + '/');
+//     }
+//   });
+// }
 
-walk(files, './test262/test/', function(path) {
-  load(path, function then(task, data) {
-    var matter = parseFrontmatter(data);
-    // console.log(path);
-    if (matter === null) {
-      console.error(path);
-      backlogTasks = [];
-    }
-    complete(task);
-  }, function error(task) {
-    console.error('oh no!', path);
-    backlogTasks = [];
-    complete(task);
-  });
-}, function(){})
+// walk(files, './test262/test/', function(path) {
+//   load(path, function then(task, data) {
+//     var matter = parseFrontmatter(data);
+//     // console.log(path);
+//     if (matter === null) {
+//       console.error(path);
+//       backlogTasks = [];
+//     }
+//     complete(task);
+//   }, function error(task) {
+//     console.error('oh no!', path);
+//     backlogTasks = [];
+//     complete(task);
+//   });
+// }, function(){})
 
 // load('./test262/test/built-ins/RegExp/prototype/exec/u-lastindex-adv.js', function then(task, data) {
 //   var matter = parseFrontmatter(data);
@@ -233,14 +341,14 @@ walk(files, './test262/test/', function(path) {
 
 
 window.addEventListener('load', function() {
-  (function renderTree(tree, container, hide) {
+  (function renderTree(tree, container, path, hide) {
     var list = container.appendChild(document.createElement('ul'));
     tree.forEach(function(item) {
       var li = document.createElement('li');
       item.element = li; // mutating cached data, woo
       if (item.type === 'dir') {
         li.innerText = '[+] ' + item.name;
-        renderTree(item.files, li, true);
+        renderTree(item.files, li, path + item.name + '/', true);
         li.addEventListener('click', function(e) {
           if (e.target !== li) return;
           e.stopPropagation();
@@ -253,11 +361,31 @@ window.addEventListener('load', function() {
         });
       } else {
         li.innerText = item.name;
+        var status = li.appendChild(document.createElement('span'));
+        status.style.paddingLeft = '5px';
+        li.addEventListener('click', function(e) {
+          if (e.target !== li) return;
+          e.stopPropagation();
+          load(path + item.name, function(task, data) {
+            runTest262Test(data, function() {
+              status.innerText = 'Pass!';
+              status.className = 'pass';
+            }, function(msg) {
+              status.innerText = msg;
+              status.className = 'fail';
+            });
+            complete(task);
+          }, function(task) {
+            status.innerText = 'Load failed.';
+            status.className = 'fail';
+            complete(task);
+          });
+        });
       }
       list.appendChild(li);
     });
     if (hide) list.style.display = 'none';
-  })(files, document.getElementById('tree'), false);
+  })(files, document.getElementById('tree'), './test262/test/', false);
 
   //runTest262Test('1 1');
 });
