@@ -30,43 +30,41 @@ function complete(task) {
   }
 }
 
-function load(url, then, error) {
+function load(url, then, error, noCache) {
   // 'then' takes 'task' as its first parameter and calls complete(task) when done.
   // it takes the loaded data as its second parameter.
   // 'error' takes as 'task' as its first parameter and calls complete(task) when done.
 
   enqueue(function task() {
-    if (cache.hasOwnProperty(url)) {
+    if (!noCache && cache.hasOwnProperty(url)) {
       if (cache[url].pending) {
         cache[url].pending.push({ task: task, then: then, error: error });
       } else {
         then(task, cache[url].data);        
       }
     } else {
-      cache[url] = {pending: []}; // This will contain any other tasks which are waiting on the same URL while this request is pending.
+      if (!noCache) cache[url] = {pending: []}; // This will contain any other tasks which are waiting on the same URL while this request is pending.
       var req = new XMLHttpRequest;
       req.addEventListener('load', function() {
         var data = this.responseText;
-        var waiting = cache[url].pending;
-        try {
-          data = JSON.parse(data);
-          if (data.message) {
-            throw null;
-          }
+        if (noCache) {
+          then(task, data);
+        } else {
+          var waiting = cache[url].pending;
           cache[url] = {data: data};
           then(task, data);
-          waiting.forEach(function(obj) { obj.then(obj.task, data); });
-        } catch(e) {
+          waiting.forEach(function(obj) { obj.then(obj.task, data); });          
+        }
+      });
+      req.addEventListener('error', function() {
+        if (noCache) {
+          error(task);
+        } else {
+          var waiting = cache[url].pending;
           delete cache[url];
           error(task);
           waiting.forEach(function(obj) { obj.error(obj.task); });
         }
-      });
-      req.addEventListener('error', function() {
-        var waiting = cache[url].pending;
-        delete cache[url];
-        error(task);
-        waiting.forEach(function(obj) { obj.error(obj.task); });
       });
       req.open('GET', url);
       req.send();
@@ -76,40 +74,64 @@ function load(url, then, error) {
 
 // end cache/fetch primitives
 
-function loadSubtree(path, container, then) {
-  if (container.loadState !== 'loaded') {
-    container.loadState = 'loading';
+var wait = 50; // ms
+function runTest262Test(src, pass, fail) {
+  var err, timeout;
+  var iframe = document.createElement('iframe');
+  iframe.src = './blank.html';
+  document.body.appendChild(iframe);
+  var w = iframe.contentWindow;
+  // w.addEventListener('error', function(e) { err = e; });
+  // w.onerror = function(e, b, c, d, f, g) { err = e; console.log(b, c, d, f, g)};
+  w.done = function() {
+    console.log(err, typeof err);
+    err = true;
+    clearTimeout(timeout);
+    //document.body.removeChild(iframe);
+  };
+  w.error = function(e) {
+    console.log('hit', e);
+    err = e;
   }
-  load(repo + path, function(task, data) { // then
-    if (container.loadState === 'loaded') {
-      then(task, data);
-      return;
-    }
+
+  function append(src) {
+    var script = w.document.createElement('script');
+    script.setAttribute('crossorogin', 'anonymous');
+    script.text = src;
+    w.document.body.appendChild(script);
+  }
+  append('window.onerror = function(e, b, c, d, f, g) { error(e); console.log(b, c, d, f, g)};')
+  append(src);
+  append('done();');
+
+  if (err === undefined) {
+    timeout = setTimeout(wait, function() {
+      console.err('done not invoked!');
+      document.body.removeChild(iframe);
+    });
+  }
+}
+
+
+// end runner primitive
+
+window.addEventListener('load', function() {
+  (function renderTree(tree, container, hide) {
     var list = container.appendChild(document.createElement('ul'));
-    data.forEach(function(item) {
+    tree.forEach(function(item) {
       var li = document.createElement('li');
       item.element = li; // mutating cached data, woo
       if (item.type === 'dir') {
         li.innerText = '[+] ' + item.name;
-        li.loadState = '';
+        renderTree(item.files, li, true);
         li.addEventListener('click', function(e) {
           if (e.target !== li) return;
           e.stopPropagation();
-          switch (li.loadState) {
-            case '':
-              loadSubtree(item.path, li, complete);
-              break;
-            case 'loading':
-              console.log('in progress');
-              break;
-            case 'loaded':
-              var subtree = li.querySelector('ul');
-              if (subtree.style.display === 'none') {
-                subtree.style.display = '';
-              } else {
-                subtree.style.display = 'none';
-              }
-              break;
+          var subtree = li.querySelector('ul');
+          if (subtree.style.display === 'none') {
+            subtree.style.display = '';
+          } else {
+            subtree.style.display = 'none';
           }
         });
       } else {
@@ -117,27 +139,35 @@ function loadSubtree(path, container, then) {
       }
       list.appendChild(li);
     });
-    container.loadState = 'loaded';
-    then(task, data);
-  }, function(task) { // error
-    document.getElementById('error').innerHTML = 'Error!';
-    complete(task);
-  });
-}
+    if (hide) list.style.display = 'none';
+  })(files, document.getElementById('tree'), false);
 
-window.addEventListener('load', function() {
-  loadSubtree('test/annexB/built-ins', document.getElementById('tree'), complete);
+  runTest262Test('1 1');
 });
 
+// load('https://api.github.com/repos/bakkot/test262-web-runner/git/refs/heads/', function then(task, data) {
+//   data = JSON.parse(data);
+//   var sha = data.filter(function(o) {
+//     return o.ref === "refs/heads/master";
+//   })[0].object.sha;
 
-function recur(path, container) {
-  function handleSubtree(task, data) {
-    data.forEach(function(item) {
-      loadSubtree(item.path, item.element, handleSubtree);
-    });
-    complete(task);
-  }
+//   load('https://api.github.com/repos/bakkot/test262-web-runner/git/trees/' + sha + '?recursive=1', function then(task, data) {
+//     console.log(JSON.parse(data));
+//     complete(task);
+//   }, complete, true);
 
-  loadSubtree(path, container, handleSubtree);
-}
-// recur('test/annexB/built-ins', document.getElementById('tree'));
+//   complete(task);
+// }, complete)
+
+
+// function recur(path, container) {
+//   function handleSubtree(task, data) {
+//     data.forEach(function(item) {
+//       loadSubtree(item.path, item.element, handleSubtree);
+//     });
+//     complete(task);
+//   }
+
+//   loadSubtree(path, container, handleSubtree);
+// }
+// // recur('test/annexB/built-ins', document.getElementById('tree'));
