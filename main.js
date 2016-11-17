@@ -227,16 +227,21 @@ function strict(src) {
 }
 
 var alwaysIncludes = ['assert.js', 'sta.js'];
-function runTest262Test(src, pass, fail) {
+function runTest262Test(src, pass, fail, abort) {
+  if (src.match(/\$\./)) {
+    abort('Test runner does not yet support the "$" API');
+    return;
+  }
+
   var meta = parseFrontmatter(src);
   if (!meta) {
-    fail('Couldn\'t parse frontmatter');
+    abort('Test runner couldn\'t parse frontmatter');
     return;
   }
 
   if (meta.flags.module || meta.flags.raw || meta.flags.async) {
     // todo support flags, support $
-    fail('Tool does not yet support flags: ' + JSON.stringify(meta.flags));
+    abort('Test runner does not yet support flags: ' + JSON.stringify(meta.flags));
     return;
   }
 
@@ -254,7 +259,7 @@ function runTest262Test(src, pass, fail) {
       runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), checkErr(meta.negative, pass, fail));
     }
   }, function() {
-    fail('Error loading test data.');
+    abort('Error loading test data.');
   });
 }
 
@@ -289,6 +294,13 @@ function runSubtree(root, then, toExpand) {
         root.passes = 0;
         root.fails = 1;
         then(0, 1);
+        complete(task);
+      }, function(msg) {
+        status.textContent = msg;
+        status.className = 'fail';
+        root.passes = 0;
+        root.fails = 0;
+        then(0, 0);
         complete(task);
       });
     }, function(task) {
