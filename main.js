@@ -381,56 +381,64 @@ function runTest262Test(src, pass, fail) {
 
 
 window.addEventListener('load', function() {
-  (function renderTree(tree, container, path, hide) {
-    var list = container.appendChild(document.createElement('ul'));
-    tree.forEach(function(item) {
-      var li = document.createElement('li');
-      item.element = li; // mutating cached data, woo
-      if (item.type === 'dir') {
-        li.innerText = '[+] ' + item.name;
-        var status = li.appendChild(document.createElement('span'));
-        status.style.paddingLeft = '5px';
-        renderTree(item.files, li, path + item.name + '/', true);
-        li.addEventListener('click', function(e) {
-          if (e.target !== li) return;
-          e.stopPropagation();
-          var subtree = li.querySelector('ul');
-          if (subtree.style.display === 'none') {
-            subtree.style.display = '';
-          } else {
-            subtree.style.display = 'none';
-          }
-        });
-      } else {
-        li.innerText = item.name;
-        li.path = path + item.name; // todo find a better way of doing this
-        var status = li.appendChild(document.createElement('span'));
-        status.style.paddingLeft = '5px';
-        li.addEventListener('click', function(e) {
-          if (e.target !== li) return;
-          e.stopPropagation();
-          load(path + item.name, function(task, data) {
-            runTest262Test(data, function() {
-              status.innerText = 'Pass!';
-              status.className = 'pass';
-            }, function(msg) {
-              status.innerText = msg;
-              status.className = 'fail';
-            });
-            complete(task);
-          }, function(task) {
-            status.innerText = 'Load failed.';
-            status.className = 'fail';
-            complete(task);
-          });
-        });
-      }
-      list.appendChild(li);
-    });
-    if (hide) list.style.display = 'none';
-  })(files, document.getElementById('tree'), './test262/test/', false);
+  // (function renderTree(tree, container, path, hide) {
+  //   var list = container.appendChild(document.createElement('ul'));
+  //   tree.forEach(function(item) {
+  //     var li = document.createElement('li');
+  //     item.element = li; // mutating cached data, woo
+  //     if (item.type === 'dir') {
+  //       li.innerText = '[+] ' + item.name;
+  //       var status = li.appendChild(document.createElement('span'));
+  //       status.style.paddingLeft = '5px';
+  //       renderTree(item.files, li, path + item.name + '/', true);
+  //       li.addEventListener('click', function(e) {
+  //         if (e.target !== li) return;
+  //         e.stopPropagation();
+  //         var subtree = li.querySelector('ul');
+  //         if (subtree.style.display === 'none') {
+  //           subtree.style.display = '';
+  //         } else {
+  //           subtree.style.display = 'none';
+  //         }
+  //       });
+  //     } else {
+  //       li.innerText = item.name;
+  //       li.path = path + item.name; // todo find a better way of doing this
+  //       var status = li.appendChild(document.createElement('span'));
+  //       status.style.paddingLeft = '5px';
+  //       li.addEventListener('click', function(e) {
+  //         if (e.target !== li) return;
+  //         e.stopPropagation();
+  //         load(path + item.name, function(task, data) {
+  //           runTest262Test(data, function() {
+  //             status.innerText = 'Pass!';
+  //             status.className = 'pass';
+  //           }, function(msg) {
+  //             status.innerText = msg;
+  //             status.className = 'fail';
+  //           });
+  //           complete(task);
+  //         }, function(task) {
+  //           status.innerText = 'Load failed.';
+  //           status.className = 'fail';
+  //           complete(task);
+  //         });
+  //       });
+  //     }
+  //     list.appendChild(li);
+  //   });
+  //   if (hide) list.style.display = 'none';
+  // })(files, document.getElementById('tree'), './test262/test/', false);
 
   //runTest262Test('1 1');
+
+
+  var ele = document.getElementById('zipload');
+  ele.addEventListener('change', function(){
+    if (!ele.files[0]) return;
+    loadZip(ele.files[0]);
+  });
+
 });
 
 
@@ -532,3 +540,101 @@ function runTree(root) {
 //   loadSubtree(path, container, handleSubtree);
 // }
 // // recur('test/annexB/built-ins', document.getElementById('tree'));
+
+
+// document.getElementById('zipload').click();
+
+
+function getStructure(zip, predicate) {
+  var structure = Object.create(null);
+  structure.type = 'dir';
+  structure.name = '.';
+  structure.files = Object.create(null);
+  zip.forEach(function(path, file) {
+    if (!predicate(path)) return;
+    path = path.split('/');
+    if (path[path.length - 1] === '') return; // i.e. directory
+    var dir = structure;
+    for (var i = 0; i < path.length - 1; ++i) {
+      if (!Object.prototype.hasOwnProperty.call(dir.files, path[i])) {
+        dir.files[path[i]] = Object.create(null);
+        dir.files[path[i]].type = 'dir';
+        dir.files[path[i]].name = path[i];
+        dir.files[path[i]].files = Object.create(null);
+      }
+      dir = dir.files[path[i]];
+    }
+    var obj = Object.create(null);
+    obj.type = 'file';
+    obj.name = path[path.length - 1];
+    obj.file = file;
+    dir.files[path[path.length - 1]] = obj;
+  });
+  return structure;
+}
+
+function renderTree(tree, container, path, hide) {
+  var list = container.appendChild(document.createElement('ul'));
+  Object.keys(tree).sort().forEach(function(key) {
+    var item = tree[key];
+    var li = document.createElement('li');
+    item.element = li; // mutating cached data, woo
+    if (item.type === 'dir') {
+      li.innerText = '[+] ' + item.name;
+      var status = li.appendChild(document.createElement('span'));
+      status.style.paddingLeft = '5px';
+      renderTree(item.files, li, path + item.name + '/', true);
+      li.addEventListener('click', function(e) {
+        if (e.target !== li) return;
+        e.stopPropagation();
+        var subtree = li.querySelector('ul');
+        if (subtree.style.display === 'none') {
+          subtree.style.display = '';
+        } else {
+          subtree.style.display = 'none';
+        }
+      });
+    } else {
+      li.innerText = item.name;
+      li.path = path + item.name; // todo find a better way of doing this
+      var status = li.appendChild(document.createElement('span'));
+      status.style.paddingLeft = '5px';
+      li.addEventListener('click', function(e) {
+        if (e.target !== li) return;
+        e.stopPropagation();
+        load(path + item.name, function(task, data) {
+          runTest262Test(data, function() {
+            status.innerText = 'Pass!';
+            status.className = 'pass';
+          }, function(msg) {
+            status.innerText = msg;
+            status.className = 'fail';
+          });
+          complete(task);
+        }, function(task) {
+          status.innerText = 'Load failed.';
+          status.className = 'fail';
+          complete(task);
+        });
+      });
+    }
+    list.appendChild(li);
+  });
+  if (hide) list.style.display = 'none';
+}
+
+// (files, document.getElementById('tree'), './test262/test/', false);
+
+function loadZip(z) {
+  JSZip.loadAsync(z).then(z => {
+    var tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/_FIXTURE\.js/); });
+    var keys = Object.keys(tree.files);
+    if (keys.length === 1) tree = tree.files[keys[0]];
+    if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
+      throw "Doesn't look like a test262 bundle to me!";
+    }
+    renderTree(tree.files.test.files, document.getElementById('tree'), './test262/test/', false);
+  });
+}
+
+
