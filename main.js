@@ -258,18 +258,6 @@ function runTest262Test(src, pass, fail) {
 
 // end runner primitive
 
-
-window.addEventListener('load', function() {
-  var zipEle = document.getElementById('zipload');
-  zipEle.addEventListener('change', function(){
-    if (!zipEle.files[0]) return;
-    loadZip(zipEle.files[0]);
-  });
-
-});
-
-
-
 function runSubtree(root, then, toExpand) {
   if (root.passes) {
     then(root.passes, root.fails);
@@ -348,39 +336,6 @@ function runTree(root) {
   runSubtree(root, function(){}, []);
 }
 
-
-
-// document.getElementById('zipload').click();
-
-
-function getStructure(zip, predicate) {
-  var structure = Object.create(null);
-  structure.type = 'dir';
-  structure.name = '.';
-  structure.files = Object.create(null);
-  zip.forEach(function(path, file) {
-    if (!predicate(path)) return;
-    path = path.split('/');
-    if (path[path.length - 1] === '') return; // i.e. directory
-    var dir = structure;
-    for (var i = 0; i < path.length - 1; ++i) {
-      if (!Object.prototype.hasOwnProperty.call(dir.files, path[i])) {
-        dir.files[path[i]] = Object.create(null);
-        dir.files[path[i]].type = 'dir';
-        dir.files[path[i]].name = path[i];
-        dir.files[path[i]].files = Object.create(null);
-      }
-      dir = dir.files[path[i]];
-    }
-    var obj = Object.create(null);
-    obj.type = 'file';
-    obj.name = path[path.length - 1];
-    obj.file = file;
-    dir.files[path[path.length - 1]] = obj;
-  });
-  return structure;
-}
-
 function renderTree(tree, container, path, hide) {
   var list = container.appendChild(document.createElement('ul'));
   Object.keys(tree).sort().forEach(function(key) {
@@ -420,10 +375,38 @@ function renderTree(tree, container, path, hide) {
   if (hide) list.style.display = 'none';
 }
 
+function getStructure(zip, predicate) {
+  var structure = Object.create(null);
+  structure.type = 'dir';
+  structure.name = '.';
+  structure.files = Object.create(null);
+  zip.forEach(function(path, file) {
+    if (!predicate(path)) return;
+    path = path.split('/');
+    if (path[path.length - 1] === '') return; // i.e. directory
+    var dir = structure;
+    for (var i = 0; i < path.length - 1; ++i) {
+      if (!Object.prototype.hasOwnProperty.call(dir.files, path[i])) {
+        dir.files[path[i]] = Object.create(null);
+        dir.files[path[i]].type = 'dir';
+        dir.files[path[i]].name = path[i];
+        dir.files[path[i]].files = Object.create(null);
+      }
+      dir = dir.files[path[i]];
+    }
+    var obj = Object.create(null);
+    obj.type = 'file';
+    obj.name = path[path.length - 1];
+    obj.file = file;
+    dir.files[path[path.length - 1]] = obj;
+  });
+  return structure;
+}
+
 var tree; // global variables are fun!
 function loadZip(z) {
-  JSZip.loadAsync(z).then(function(z) {
-    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/_FIXTURE\.js/); });
+  return JSZip.loadAsync(z).then(function(z) {
+    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/(^\.)|(_FIXTURE\.js$)/); });
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
@@ -432,5 +415,43 @@ function loadZip(z) {
     renderTree(tree.files.test.files, document.getElementById('tree'), ['test'], false);
   });
 }
+
+// end tree rendering / running stuff
+
+var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
+// var zipballUrl =
+
+window.addEventListener('load', function() {
+  var fileEle = document.getElementById('fileLoader');
+  var buttons = document.getElementById('buttons');
+
+  fileEle.addEventListener('change', function() {
+    if (!fileEle.files[0]) return;
+    loadZip(fileEle.files[0]).then(function() { buttons.style.display = 'none'; });
+  });
+
+  document.getElementById('loadLocal').addEventListener('click', function() {
+    fileEle.click();
+  });
+
+  document.getElementById('loadGithub').addEventListener('click', function() {
+    var req = new XMLHttpRequest;
+    req.addEventListener('load', function() {
+      loadZip(req.response).then(function() { buttons.style.display = 'none'; });
+    });
+    req.addEventListener('error', function() {
+      console.log('err'); // todo
+    });
+    req.addEventListener('progress', function(evt) {
+      if (evt.lengthComputable) {
+        console.log(evt.loaded, evt.total);
+      }
+      console.log('prog'); // todo
+    });
+    req.open('GET', zipballUrl);
+    req.responseType = 'arraybuffer'; // todo check existence
+    req.send();
+  });
+});
 
 

@@ -20,7 +20,12 @@
 </style>
 </head>
 <body>
-<input type="file" accept=".zip" id="zipload" style="display: none;">
+<input type="file" accept=".zip" id="fileLoader" style="display: none;">
+<span id="buttons">
+	<input type="button" id="loadLocal" value="Local">
+	<input type="button" id="loadGithub" value="Github">
+</span>
+<br>
 Placeholder<br>
 <div id="error"></div>
 <div id="tree"></div>
