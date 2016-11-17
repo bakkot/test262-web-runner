@@ -72,19 +72,15 @@ function loadUnit(path) {
   };
 }
 
-function loadTask(path, then, error) {
-  return loadUnit(path)(then, error);
-}
-
 function load(path, then, error) {
-  enqueue(loadTask(path, then, error));
+  enqueue(loadUnit(path)(then, error));
 }
 
 function loadAllUnqueued(paths, then, error) {
   runAllUnqueued(paths.map(loadUnit), then, error);
 }
 
-// end cache/fetch primitives
+// end queue/fetch primitives
 
 function parseFrontmatter(src) {
   var start = src.indexOf('/*---');
@@ -383,7 +379,7 @@ function getStructure(zip, predicate) {
   zip.forEach(function(path, file) {
     if (!predicate(path)) return;
     path = path.split('/');
-    if (path[path.length - 1] === '') return; // i.e. directory
+    if (path[path.length - 1] === '') return; // i.e. this is a directory
     var dir = structure;
     for (var i = 0; i < path.length - 1; ++i) {
       if (!Object.prototype.hasOwnProperty.call(dir.files, path[i])) {
@@ -410,7 +406,7 @@ function loadZip(z) {
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
-      throw "Doesn't look like a test262 bundle to me!"; // todo
+      throw new Error("Doesn't look like a test262 bundle."); // todo
     }
     renderTree(tree.files.test.files, document.getElementById('tree'), ['test'], false);
   });
@@ -424,10 +420,13 @@ var zipballUrl = 'tc39-test262-84e6ba8.zip';
 window.addEventListener('load', function() {
   var fileEle = document.getElementById('fileLoader');
   var buttons = document.getElementById('buttons');
+  var loadStatus = document.getElementById('loadStatus');
 
   fileEle.addEventListener('change', function() {
     if (!fileEle.files[0]) return;
-    loadZip(fileEle.files[0]).then(function() { buttons.style.display = 'none'; });
+    loadZip(fileEle.files[0])
+      .then(function() { buttons.style.display = 'none'; })
+      .catch(function(e) { loadStatus.innerText = e; });
   });
 
   document.getElementById('loadLocal').addEventListener('click', function() {
@@ -435,21 +434,33 @@ window.addEventListener('load', function() {
   });
 
   document.getElementById('loadGithub').addEventListener('click', function() {
+    loadStatus.innerText = '';
     var req = new XMLHttpRequest;
+
     req.addEventListener('load', function() {
-      loadZip(req.response).then(function() { buttons.style.display = 'none'; });
+      loadStatus.innerText = 'Loaded!';
+      loadZip(req.response)
+        .then(function() { buttons.style.display = 'none'; })
+        .catch(function(e) { loadStatus.innerText = e; });
     });
+
     req.addEventListener('error', function() {
-      console.log('err'); // todo
+      loadStatus.innerText = 'Error loading.';
     });
+
+    var tick = false;
+    var MB = Math.pow(2, 20)/10;
     req.addEventListener('progress', function(evt) {
       if (evt.lengthComputable) {
-        console.log(evt.loaded, evt.total);
+        loadStatus.innerText = 'Loading... ' + Math.floor(evt.loaded/MB)/10 + 'MB / ' + Math.ceil(evt.total/MB)/10 + 'MB';
+      } else {
+        loadStatus.innerText = 'Loading... ' + (tick ? '/' : '\\');
+        tick = !tick;
       }
-      console.log('prog'); // todo
     });
+
     req.open('GET', zipballUrl);
-    req.responseType = 'arraybuffer'; // todo check existence
+    req.responseType = 'arraybuffer'; // todo check support
     req.send();
   });
 });
