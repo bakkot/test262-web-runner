@@ -265,20 +265,20 @@ function runSubtree(root, then, toExpand) {
       toExpand.forEach(function(ele) {
         ele.querySelector('ul').style.display = '';
         var status = ele.querySelector('span');
-        status.innerText = 'Working...';
+        status.textContent = 'Working...';
         status.className = 'wait';
       });
-      status.innerText = 'Running...';
+      status.textContent = 'Running...';
       status.className = 'running';
       runTest262Test(data, function() {
-        status.innerText = 'Pass!';
+        status.textContent = 'Pass!';
         status.className = 'pass';
         root.passes = 1;
         root.fails = 0;
         then(1, 0);
         complete(task);
       }, function(msg) {
-        status.innerText = msg;
+        status.textContent = msg;
         status.className = 'fail';
         root.passes = 0;
         root.fails = 1;
@@ -286,7 +286,7 @@ function runSubtree(root, then, toExpand) {
         complete(task);
       });
     }, function(task) {
-      status.innerText = 'Load failed.';
+      status.textContent = 'Load failed.';
       status.className = 'fail';
       root.passes = 0;
       root.fails = 1;
@@ -313,7 +313,7 @@ function runSubtree(root, then, toExpand) {
           if (wasHidden) {
             ul.style.display = 'none';
           }
-          status.innerText = '' + passCount + ' / ' + (passCount + failCount);
+          status.textContent = '' + passCount + ' / ' + (passCount + failCount);
           status.className = failCount === 0 ? 'pass' : 'fail';
           root.passes = passCount;
           root.fails = failCount;
@@ -332,24 +332,28 @@ function runTree(root) {
   runSubtree(root, function(){}, []);
 }
 
+function addRunLink(ele) {
+  var status = ele.appendChild(document.createElement('span'));
+  status.style.paddingLeft = '5px';
+
+  var runLink = status.appendChild(document.createElement('input'));
+  runLink.type = 'button';
+  runLink.value = 'Run';
+  runLink.addEventListener('click', function(e) {
+    e.stopPropagation();
+    runTree(ele);
+  });
+}
+
 function renderTree(tree, container, path, hide) {
   var list = container.appendChild(document.createElement('ul'));
   Object.keys(tree).sort().forEach(function(key) {
     var item = tree[key];
 
     var li = document.createElement('li');
-    li.innerText = (item.type === 'dir' ? '[+] ' : '') + item.name;
+    li.textContent = (item.type === 'dir' ? '[+] ' : '') + item.name;
 
-    var status = li.appendChild(document.createElement('span'));
-    status.style.paddingLeft = '5px';
-
-    var runLink = status.appendChild(document.createElement('input'));
-    runLink.type = 'button';
-    runLink.value = 'Run';
-    runLink.addEventListener('click', function(e) {
-      e.stopPropagation();
-      runTree(li);
-    });
+    addRunLink(li);
 
     if (item.type === 'dir') {
       renderTree(item.files, li, path.concat([item.name]), true);
@@ -408,7 +412,10 @@ function loadZip(z) {
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
       throw new Error("Doesn't look like a test262 bundle."); // todo
     }
-    renderTree(tree.files.test.files, document.getElementById('tree'), ['test'], false);
+    var treeEle = document.getElementById('tree');
+    treeEle.textContent = 'Tests:';
+    addRunLink(treeEle);
+    renderTree(tree.files.test.files, treeEle, ['test'], false);
   });
 }
 
@@ -426,7 +433,7 @@ window.addEventListener('load', function() {
     if (!fileEle.files[0]) return;
     loadZip(fileEle.files[0])
       .then(function() { buttons.style.display = 'none'; })
-      .catch(function(e) { loadStatus.innerText = e; });
+      .catch(function(e) { loadStatus.textContent = e; });
   });
 
   document.getElementById('loadLocal').addEventListener('click', function() {
@@ -434,27 +441,30 @@ window.addEventListener('load', function() {
   });
 
   document.getElementById('loadGithub').addEventListener('click', function() {
-    loadStatus.innerText = '';
+    loadStatus.textContent = '';
     var req = new XMLHttpRequest;
 
     req.addEventListener('load', function() {
-      loadStatus.innerText = 'Loaded!';
+      loadStatus.textContent = 'Loaded!';
       loadZip(req.response)
         .then(function() { buttons.style.display = 'none'; })
-        .catch(function(e) { loadStatus.innerText = e; });
+        .catch(function(e) { loadStatus.textContent = e; });
     });
 
     req.addEventListener('error', function() {
-      loadStatus.innerText = 'Error loading.';
+      loadStatus.textContent = 'Error loading.';
     });
 
     var tick = false;
     var MB = Math.pow(2, 20)/10;
     req.addEventListener('progress', function(evt) {
       if (evt.lengthComputable) {
-        loadStatus.innerText = 'Loading... ' + Math.floor(evt.loaded/MB)/10 + 'MB / ' + Math.ceil(evt.total/MB)/10 + 'MB';
+        var loaded = '' + Math.floor(evt.loaded/MB)/10;
+        var total = '' + Math.ceil(evt.total/MB)/10;
+        while (loaded.length < total.length) loaded = '\u00A0' + loaded;
+        loadStatus.textContent = 'Loading... ' + loaded + 'MB / ' + total + 'MB';
       } else {
-        loadStatus.innerText = 'Loading... ' + (tick ? '/' : '\\');
+        loadStatus.textContent = 'Loading... ' + (tick ? '/' : '\\');
         tick = !tick;
       }
     });
