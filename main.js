@@ -1,8 +1,8 @@
+// queue/fetch primitives
+
 var runningTasks = [];
 var backlogTasks = [];
 var maxRunningTasks = 4;
-
-var cache = {};
 
 var ref = '';
 var repo = 'https://api.github.com/repos/tc39/test262/contents/';
@@ -80,7 +80,7 @@ function loadAllUnqueued(paths, then, error) {
   runAllUnqueued(paths.map(loadUnit), then, error);
 }
 
-// end queue/fetch primitives
+// test runner primitives
 
 function parseFrontmatter(src) {
   var start = src.indexOf('/*---');
@@ -93,6 +93,11 @@ function parseFrontmatter(src) {
   match = frontmatter.match(/(?:^|\n)includes:\s*\[([^\]]*)\]/);
   if (match) {
     includes = match[1].split(',').map(function f(s){return s.replace(/^\s+|\s+$/g, '');});
+  } else {
+    match = frontmatter.match(/(?:^|\n)includes:\s*\n(\s+-.*\n)/);
+    if (match) {
+      includes = match[1].split(',').map(function f(s){return s.replace(/^[\s\-]+|\s+$/g, '');});
+    }
   }
 
   match = frontmatter.match(/(?:^|\n)flags:\s*\[([^\]]*)\]/);
@@ -148,20 +153,14 @@ function parseFrontmatter(src) {
   return {includes: includes, flags: flags, negative: negative};
 }
 
-function checkType(errorEvent, global, kind) {
-  if (typeof errorEvent.error === 'object') {
-    return errorEvent.error instanceof global[kind];
-  } else {
-    return !!errorEvent.message.match(kind); // todo more cleverness
-  }
-}
-
 var errSigil = {};
+var wait = 50; // ms
 function runSources(sources, done) {
   var iframe = document.createElement('iframe');
 
   iframe.addEventListener('load', function() {
-    var err = errSigil, timeout;
+    var err = errSigil;
+    var timeout;
     var w = iframe.contentWindow;
     w.addEventListener('error', function(e) { err = e; });
     w.done = function(){
@@ -193,6 +192,14 @@ function runSources(sources, done) {
   document.body.appendChild(iframe);
 }
 
+function checkErrorType(errorEvent, global, kind) {
+  if (typeof errorEvent.error === 'object') {
+    return errorEvent.error instanceof global[kind];
+  } else {
+    return !!errorEvent.message.match(kind); // todo more cleverness
+  }
+}
+
 function checkErr(negative, pass, fail) {
   return function(err, w) {
     if (err === errSigil) {
@@ -203,7 +210,7 @@ function checkErr(negative, pass, fail) {
       }
     } else {
       if (negative) {
-        if (checkType(err, w, negative.type)) {
+        if (checkErrorType(err, w, negative.type)) {
           pass();
         } else {
           fail('Expecting ' + negative.phase + ' ' + negative.type + ', but got an error of another kind.');  // todo more precise complaints
@@ -220,7 +227,6 @@ function strict(src) {
 }
 
 var alwaysIncludes = ['assert.js', 'sta.js'];
-var wait = 50; // ms
 function runTest262Test(src, pass, fail) {
   var meta = parseFrontmatter(src);
   if (!meta) {
@@ -229,8 +235,8 @@ function runTest262Test(src, pass, fail) {
   }
 
   if (meta.flags.module || meta.flags.raw || meta.flags.async) {
-    // todo
-    fail('Unhandled metadata ' + JSON.stringify(meta));
+    // todo support flags, support $
+    fail('Tool does not yet support flags: ' + JSON.stringify(meta.flags));
     return;
   }
 
@@ -240,7 +246,7 @@ function runTest262Test(src, pass, fail) {
 
   loadAllUnqueued(alwaysIncludes.concat(meta.includes).map(function(include) { return ['harness', include]; }), function(includeSrcs) {
     if (!meta.flags.strict) {
-      // run in both strict and non-strict.
+      // run in both strict and non-strict
       runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
         runSources(includeSrcs.concat([src]), checkErr(meta.negative, pass, fail));
       }, fail));
@@ -252,7 +258,7 @@ function runTest262Test(src, pass, fail) {
   });
 }
 
-// end runner primitive
+// tree rendering / running
 
 function runSubtree(root, then, toExpand) {
   if (root.passes) {
@@ -260,7 +266,7 @@ function runSubtree(root, then, toExpand) {
     return;
   }
   var status = root.querySelector('span');
-  if (root.path) { // todo consistent file vs directory ordering
+  if (root.path) { // i.e. is a file
     load(root.path, function(task, data) {
       toExpand.forEach(function(ele) {
         ele.querySelector('ul').style.display = '';
@@ -355,7 +361,9 @@ function renderTree(tree, container, path, hide) {
 
     addRunLink(li);
 
-    if (item.type === 'dir') {
+    if (item.type === 'file') {
+      li.path = path.concat([item.name]);
+    } else {
       renderTree(item.files, li, path.concat([item.name]), true);
       li.addEventListener('click', function(e) {
         if (e.target !== li) return;
@@ -367,8 +375,6 @@ function renderTree(tree, container, path, hide) {
           subtree.style.display = 'none';
         }
       });
-    } else {
-      li.path = path.concat([item.name]);
     }
     list.appendChild(li);
   });
@@ -410,7 +416,7 @@ function loadZip(z) {
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
-      throw new Error("Doesn't look like a test262 bundle."); // todo
+      throw new Error("Doesn't look like a test262 bundle.");
     }
     var treeEle = document.getElementById('tree');
     treeEle.textContent = 'Tests:';
@@ -419,7 +425,7 @@ function loadZip(z) {
   });
 }
 
-// end tree rendering / running stuff
+// onload
 
 // var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
 var zipballUrl = 'tc39-test262-84e6ba8.zip';
@@ -475,4 +481,4 @@ window.addEventListener('load', function() {
   });
 });
 
-
+// todo check environment sanity
