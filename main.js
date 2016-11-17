@@ -357,6 +357,7 @@ function addRunLink(ele) {
   var runLink = status.appendChild(document.createElement('input'));
   runLink.type = 'button';
   runLink.value = 'Run';
+  runLink.className = 'btn btn-default btn-xs';
   runLink.addEventListener('click', function(e) {
     e.stopPropagation();
     runTree(ele);

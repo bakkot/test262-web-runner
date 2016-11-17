@@ -1,8 +1,13 @@
 <html>
-<head><meta charset="utf-8">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title>Test262 Web Runner</title>
-<script src="jszip.min.js"></script>
-<script src="main.js"></script>
+
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
 <style>
 .wait {
 	color: orange;
@@ -17,17 +22,37 @@
 .fail {
 	color: red;
 }
+body {
+	font-size: medium;
+}
+li {
+	margin-bottom: 2px;
+	margin-top: 2px;
+}
 </style>
+
+<script src="jszip.min.js"></script>
+<script src="main.js"></script>
+
 </head>
+
+
+
 <body>
 <input type="file" accept=".zip" id="fileLoader" style="display: none;">
-<span id="buttons">
-Load a .zip of <a href="https://github.com/tc39/test262.git">the Test262 repository</a> (e.g. <a href="https://api.github.com/repos/tc39/test262/zipball">this</a>):
-	<input type="button" id="loadLocal" value="Local">
-	<input type="button" id="loadGithub" value="Remote">
-	<span id="loadStatus" style="padding-left: 10px;"></span>
-</span>
-<br>
-<div id="tree"></div>
+<div class="container">
+  <div class="page-header">
+    <h1>Test262 Web Runner</h1>
+    <p class="lead">Run the official <a href="https://github.com/tc39/test262">JavaScript conformance tests</a> in your browser.</p>
+  </div>
+	<span id="buttons">
+		Load a .zip of <a href="https://github.com/tc39/test262.git">the Test262 repository</a> (e.g. <a href="https://api.github.com/repos/tc39/test262/zipball">this</a>):
+		<input type="button" class="btn btn-default btn-sm" id="loadLocal" value="Local">
+		<input type="button" class="btn btn-default btn-sm" id="loadGithub" value="Remote">
+		<span id="loadStatus" style="padding-left: 10px;"></span>
+		<br>
+	</span>
+	<div id="tree"></div>
+</div>
 </body>
 </html>
