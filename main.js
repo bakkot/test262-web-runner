@@ -271,24 +271,41 @@ window.addEventListener('load', function() {
 
 
 function runSubtree(root, then, toExpand) {
+  if (root.passes) {
+    then(root.passes, root.fails);
+    return;
+  }
   var status = root.querySelector('span');
-  if (root.path) {
+  if (root.path) { // todo consistent file vs directory ordering
     load(root.path, function(task, data) {
-      toExpand.forEach(function(ele) { ele.style.display = '' });
+      toExpand.forEach(function(ele) {
+        ele.querySelector('ul').style.display = '';
+        var status = ele.querySelector('span');
+        status.innerText = 'Working...';
+        status.className = 'wait';
+      });
+      status.innerText = 'Running...';
+      status.className = 'running';
       runTest262Test(data, function() {
         status.innerText = 'Pass!';
         status.className = 'pass';
+        root.passes = 1;
+        root.fails = 0;
         then(1, 0);
         complete(task);
       }, function(msg) {
         status.innerText = msg;
         status.className = 'fail';
+        root.passes = 0;
+        root.fails = 1;
         then(0, 1);
         complete(task);
       });
     }, function(task) {
       status.innerText = 'Load failed.';
       status.className = 'fail';
+      root.passes = 0;
+      root.fails = 1;
       then(0, 1);
     });
   } else {
@@ -314,17 +331,19 @@ function runSubtree(root, then, toExpand) {
           }
           status.innerText = '' + passCount + ' / ' + (passCount + failCount);
           status.className = failCount === 0 ? 'pass' : 'fail';
+          root.passes = passCount;
+          root.fails = failCount;
           then(passCount, failCount);
         }
-      }, (i === 0 && wasHidden) ? toExpand.concat([ul]) : []);
+      }, i === 0 ? toExpand.concat([root]) : []);
     }
   }
 }
 
 function runTree(root) {
-  var statuses = root.querySelectorAll('span');
-  for (var i = 0; i < statuses.length; ++i) {
-    statuses[i].innerText = '';
+  var buttons = root.querySelectorAll('input');
+  for (var i = 0; i < buttons.length; ++i) {
+    buttons[i].parentNode.removeChild(buttons[i]);
   }
   runSubtree(root, function(){}, []);
 }
@@ -366,11 +385,22 @@ function renderTree(tree, container, path, hide) {
   var list = container.appendChild(document.createElement('ul'));
   Object.keys(tree).sort().forEach(function(key) {
     var item = tree[key];
+
     var li = document.createElement('li');
+    li.innerText = (item.type === 'dir' ? '[+] ' : '') + item.name;
+
+    var status = li.appendChild(document.createElement('span'));
+    status.style.paddingLeft = '5px';
+
+    var runLink = status.appendChild(document.createElement('input'));
+    runLink.type = 'button';
+    runLink.value = 'Run';
+    runLink.addEventListener('click', function(e) {
+      e.stopPropagation();
+      runTree(li);
+    });
+
     if (item.type === 'dir') {
-      li.innerText = '[+] ' + item.name;
-      var status = li.appendChild(document.createElement('span'));
-      status.style.paddingLeft = '5px';
       renderTree(item.files, li, path.concat([item.name]), true);
       li.addEventListener('click', function(e) {
         if (e.target !== li) return;
@@ -383,31 +413,21 @@ function renderTree(tree, container, path, hide) {
         }
       });
     } else {
-      li.innerText = item.name;
-      li.path = path.concat([item.name]); // todo find a better way of doing this
-      var status = li.appendChild(document.createElement('span'));
-      status.style.paddingLeft = '5px';
-      li.addEventListener('click', function(e) {
-        if (e.target !== li) return;
-        e.stopPropagation();
-        runTree(e.target);
-      });
+      li.path = path.concat([item.name]);
     }
     list.appendChild(li);
   });
   if (hide) list.style.display = 'none';
 }
 
-// (files, document.getElementById('tree'), './test262/test/', false);
-
 var tree; // global variables are fun!
 function loadZip(z) {
-  JSZip.loadAsync(z).then(z => {
+  JSZip.loadAsync(z).then(function(z) {
     tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/_FIXTURE\.js/); });
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
-      throw "Doesn't look like a test262 bundle to me!";
+      throw "Doesn't look like a test262 bundle to me!"; // todo
     }
     renderTree(tree.files.test.files, document.getElementById('tree'), ['test'], false);
   });
