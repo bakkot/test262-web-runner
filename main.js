@@ -90,17 +90,17 @@ function parseFrontmatter(src) {
   var match, includes = [], flags = {}, negative = null;
   var frontmatter = src.substring(start+5, end);
 
-  match = frontmatter.match(/(?:^|\n)includes:\s*\[([^\]]*)\]/);
+  match = frontmatter.match(/(?:^|\n)\s*includes:\s*\[([^\]]*)\]/);
   if (match) {
     includes = match[1].split(',').map(function f(s){return s.replace(/^\s+|\s+$/g, '');});
   } else {
-    match = frontmatter.match(/(?:^|\n)includes:\s*\n(\s+-.*\n)/);
+    match = frontmatter.match(/(?:^|\n)\s*includes:\s*\n(\s+-.*\n)/);
     if (match) {
       includes = match[1].split(',').map(function f(s){return s.replace(/^[\s\-]+|\s+$/g, '');});
     }
   }
 
-  match = frontmatter.match(/(?:^|\n)flags:\s*\[([^\]]*)\]/);
+  match = frontmatter.match(/(?:^|\n)\s*flags:\s*\[([^\]]*)\]/);
   if (match) {
     match[1].split(',').map(function f(s){return s.replace(/^\s+|\s+$/g, '');}).forEach(function(flag) {
       switch (flag) {
@@ -134,7 +134,7 @@ function parseFrontmatter(src) {
     });
   }
 
-  match = frontmatter.match(/(?:^|\n)negative:/);
+  match = frontmatter.match(/(?:^|\n)\s*negative:/);
   if (match) {
     var phase, type;
     frontmatter.substr(match.index + 9).split('\n').forEach(function(line) {
@@ -213,7 +213,11 @@ function checkErr(negative, pass, fail) {
         if (checkErrorType(err, w, negative.type)) {
           pass();
         } else {
-          fail('Expecting ' + negative.phase + ' ' + negative.type + ', but got an error of another kind.');  // todo more precise complaints
+          if (negative.phase === 'early' && err.message && err.message.match('NotEarlyError')) {
+            fail('Expecting early ' + negative.type + ', but parsing succeeded without errors.');
+          } else {
+            fail('Expecting ' + negative.phase + ' ' + negative.type + ', but got an error of another kind.');  // todo more precise complaints
+          }
         }
       } else {
         fail('Unexpected error: ' + err.message.replace(/^uncaught\W+/i, ''));
@@ -227,29 +231,40 @@ function strict(src) {
 }
 
 var alwaysIncludes = ['assert.js', 'sta.js'];
-function runTest262Test(src, pass, fail, abort) {
+function runTest262Test(src, pass, fail, skip) {
+  if (src.match(/DETACHBUFFER/)) {
+    skip('Test runner does not support detatching array buffers.');
+    return;
+  }
+
   if (src.match(/\$\./)) {
-    abort('Test runner does not yet support the "$" API');
+    skip('Test runner does not yet support the "$" API');
     return;
   }
 
   var meta = parseFrontmatter(src);
   if (!meta) {
-    abort('Test runner couldn\'t parse frontmatter');
+    skip('Test runner couldn\'t parse frontmatter');
     return;
   }
 
   if (meta.flags.module || meta.flags.raw || meta.flags.async) {
     // todo support flags, support $
-    abort('Test runner does not yet support flags: ' + JSON.stringify(meta.flags));
+    skip('Test runner does not yet support flags: ' + JSON.stringify(meta.flags));
     return;
   }
 
   if (meta.negative && meta.negative.phase === 'early' && !meta.flags.raw) {
-    src += 'throw new Error("NotEarlyError");\n';
+    src = 'throw new Error("NotEarlyError");\n' + src;
   }
 
   loadAllUnqueued(alwaysIncludes.concat(meta.includes).map(function(include) { return ['harness', include]; }), function(includeSrcs) {
+
+    // cleanup of global object. would be nice to also delete window.top, but we can't.
+    if (src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
+      includeSrcs.push('delete window.name;\ndelete window.length;');
+    }
+
     if (!meta.flags.strict) {
       // run in both strict and non-strict
       runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
@@ -259,7 +274,7 @@ function runTest262Test(src, pass, fail, abort) {
       runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), checkErr(meta.negative, pass, fail));
     }
   }, function() {
-    abort('Error loading test data.');
+    skip('Error loading test data.');
   });
 }
 
@@ -267,7 +282,7 @@ function runTest262Test(src, pass, fail, abort) {
 
 function runSubtree(root, then, toExpand) {
   if (root.passes) {
-    then(root.passes, root.fails);
+    then(root.passes, root.fails, root.skips);
     return;
   }
   var status = root.querySelector('span');
@@ -286,57 +301,63 @@ function runSubtree(root, then, toExpand) {
         status.className = 'pass';
         root.passes = 1;
         root.fails = 0;
-        then(1, 0);
+        root.skips = 0;
+        then(1, 0, 0);
         complete(task);
       }, function(msg) {
         status.textContent = msg;
         status.className = 'fail';
         root.passes = 0;
         root.fails = 1;
-        then(0, 1);
+        root.skips = 0;
+        then(0, 1, 0);
         complete(task);
       }, function(msg) {
-        console.log(root.path.join('/'), msg);
         status.textContent = msg;
-        status.className = 'fail';
+        status.className = 'skip';
         root.passes = 0;
         root.fails = 0;
-        then(0, 0);
+        root.skips = 1;
+        then(0, 0, 1);
         complete(task);
       });
     }, function(task) {
       status.textContent = 'Load failed.';
-      status.className = 'fail';
+      status.className = 'skip';
       root.passes = 0;
-      root.fails = 1;
-      then(0, 1);
+      root.fails = 0;
+      root.skips = 1;
+      then(0, 0, 1);
     });
   } else {
     var doneCount = 0;
     var ul = root.querySelector('ul');
     var children = ul.children;
     if (children.length === 0) {
-      then(0, 0);
+      then(0, 0, 0);
       return;
     }
     var wasHidden = ul.style.display === 'none';
     var len = children.length;
     var passCount = 0;
     var failCount = 0;
+    var skipCount = 0;
     for (var i = 0; i < len; ++i) {
-      runSubtree(children[i], function(passes, fails) {
+      runSubtree(children[i], function(passes, fails, skips) {
         ++doneCount;
         passCount += passes;
         failCount += fails;
+        skipCount += skips;
         if (doneCount === len) {
           if (wasHidden) {
             ul.style.display = 'none';
           }
-          status.textContent = '' + passCount + ' / ' + (passCount + failCount);
+          status.textContent = '' + passCount + ' / ' + (passCount + failCount) + (skipCount > 0 ? ' (skipped ' + skipCount + ')' : '')
           status.className = failCount === 0 ? 'pass' : 'fail';
           root.passes = passCount;
           root.fails = failCount;
-          then(passCount, failCount);
+          root.skips = skipCount;
+          then(passCount, failCount, skipCount);
         }
       }, i === 0 ? toExpand.concat([root]) : []);
     }
