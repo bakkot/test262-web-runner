@@ -30,107 +30,8 @@ function complete(task) {
   }
 }
 
-function delay(wait, task) {
-  return function(me) {
-    setTimeout(function() { task(me); }, wait);
-  };
-}
-
-function enqueueSimple(fn) {
-  enqueue(function(task) {
-    fn();
-    complete(task);
-  });
-}
-
-function loadUnit(path, noCache) {
-  return function(then, error) {
-    return function(task) {
-      var file = path.reduce(function(acc, name) { return acc.files[name]; }, tree).file;
-      file.async("string").then(function(c) { then(task, c); }, function(e) { error(task); });
-      return;
-      if (!noCache && cache.hasOwnProperty(url)) {
-        if (cache[url].pending) {
-          cache[url].pending.push({ task: task, then: then, error: error });
-        } else {
-          then(task, cache[url].data);        
-        }
-      } else {
-        if (!noCache) cache[url] = {pending: []}; // This will contain any other tasks which are waiting on the same URL while this request is pending.
-        var req = new XMLHttpRequest;
-        req.addEventListener('load', function() {
-          var data = this.responseText;
-          if (noCache) {
-            then(task, data);
-          } else {
-            var waiting = cache[url].pending;
-            cache[url] = {data: data};
-            then(task, data);
-            waiting.forEach(function(obj) { obj.then(obj.task, data); });          
-          }
-        });
-        req.addEventListener('error', function() {
-          if (noCache) {
-            error(task);
-          } else {
-            var waiting = cache[url].pending;
-            delete cache[url];
-            error(task);
-            waiting.forEach(function(obj) { obj.error(obj.task); });
-          }
-        });
-        req.open('GET', url);
-        req.send();
-      }
-    };
-  };
-}
-
-function loadTask(path, then, error, noCache) {
-  return loadUnit(path, noCache)(then, error);
-}
-
-function load(path, then, error, noCache) {
-  // 'then' takes 'task' as its first parameter and calls complete(task) when done.
-  // it takes the loaded data as its second parameter.
-  // 'error' takes as 'task' as its first parameter and calls complete(task) when done.
-
-  enqueue(loadTask(path, then, error, noCache));
-}
-
-function loadUnqueued(path, then, error, noCache) {
-  loadTask(path, then, error, noCache)(null);
-}
-
-function enqueueAll(units, then, error) {
-  if (units.length === 0) {
-    then([]);
-    return;
-  }
-  var ok = true;
-  var count = 0;
-  var results = Array(units.length);
-  units.forEach(function(unit, i) {
-    enqueue(unit(function(task, data) {
-      if (ok) {
-        results[i] = data;
-        ++count;
-        if (count === results.length) {
-          then(results);
-        }
-      }
-      complete(task);
-    }, function(task) {
-      if (ok) {
-        ok = false;
-        error();
-      }
-      complete(task);
-    }));
-  });
-}
-
 function runAllUnqueued(units, then, error) {
+  // basically Promise.all
   if (units.length === 0) {
     then([]);
     return;
@@ -156,8 +57,27 @@ function runAllUnqueued(units, then, error) {
   });
 }
 
-function loadAll(paths, then, error) {
-  enqueueAll(paths.map(loadUnit), then, error);
+function delay(wait, task) {
+  return function(me) {
+    setTimeout(function() { task(me); }, wait);
+  };
+}
+
+function loadUnit(path) {
+  return function(then, error) {
+    return function(task) {
+      var file = path.reduce(function(acc, name) { return acc.files[name]; }, tree).file;
+      file.async("string").then(function(c) { then(task, c); }, function(e) { error(task); });
+    };
+  };
+}
+
+function loadTask(path, then, error) {
+  return loadUnit(path)(then, error);
+}
+
+function load(path, then, error) {
+  enqueue(loadTask(path, then, error));
 }
 
 function loadAllUnqueued(paths, then, error) {
@@ -339,120 +259,17 @@ function runTest262Test(src, pass, fail) {
 // end runner primitive
 
 
-// function walk(list, path, file, dir) {
-//   // functions are called on children before parents
-//   list.forEach(function(item) {
-//     if (item.type === 'file') {
-//       file(path + item.name);
-//     } else {
-//       walk(item.files, path + item.name + '/', file, dir);
-//       dir(path + item.name + '/');
-//     }
-//   });
-// }
-
-// walk(files, './test262/test/', function(path) {
-//   load(path, function then(task, data) {
-//     var matter = parseFrontmatter(data);
-//     // console.log(path);
-//     if (matter === null) {
-//       console.error(path);
-//       backlogTasks = [];
-//     }
-//     complete(task);
-//   }, function error(task) {
-//     console.error('oh no!', path);
-//     backlogTasks = [];
-//     complete(task);
-//   });
-// }, function(){})
-
-// load('./test262/test/built-ins/RegExp/prototype/exec/u-lastindex-adv.js', function then(task, data) {
-//   var matter = parseFrontmatter(data);
-//   console.log('a');
-//   if (matter === null) {
-//     console.error('a');
-//     backlogTasks = [];
-//   }
-//   console.log(matter)
-//   complete(task);
-// }, function error(task) {
-//   console.error('oh no!', 'a');
-//   backlogTasks = [];
-//   complete(task);
-// });
-
-
 window.addEventListener('load', function() {
-  // (function renderTree(tree, container, path, hide) {
-  //   var list = container.appendChild(document.createElement('ul'));
-  //   tree.forEach(function(item) {
-  //     var li = document.createElement('li');
-  //     item.element = li; // mutating cached data, woo
-  //     if (item.type === 'dir') {
-  //       li.innerText = '[+] ' + item.name;
-  //       var status = li.appendChild(document.createElement('span'));
-  //       status.style.paddingLeft = '5px';
-  //       renderTree(item.files, li, path + item.name + '/', true);
-  //       li.addEventListener('click', function(e) {
-  //         if (e.target !== li) return;
-  //         e.stopPropagation();
-  //         var subtree = li.querySelector('ul');
-  //         if (subtree.style.display === 'none') {
-  //           subtree.style.display = '';
-  //         } else {
-  //           subtree.style.display = 'none';
-  //         }
-  //       });
-  //     } else {
-  //       li.innerText = item.name;
-  //       li.path = path + item.name; // todo find a better way of doing this
-  //       var status = li.appendChild(document.createElement('span'));
-  //       status.style.paddingLeft = '5px';
-  //       li.addEventListener('click', function(e) {
-  //         if (e.target !== li) return;
-  //         e.stopPropagation();
-  //         load(path + item.name, function(task, data) {
-  //           runTest262Test(data, function() {
-  //             status.innerText = 'Pass!';
-  //             status.className = 'pass';
-  //           }, function(msg) {
-  //             status.innerText = msg;
-  //             status.className = 'fail';
-  //           });
-  //           complete(task);
-  //         }, function(task) {
-  //           status.innerText = 'Load failed.';
-  //           status.className = 'fail';
-  //           complete(task);
-  //         });
-  //       });
-  //     }
-  //     list.appendChild(li);
-  //   });
-  //   if (hide) list.style.display = 'none';
-  // })(files, document.getElementById('tree'), './test262/test/', false);
-
-  //runTest262Test('1 1');
-
-
-  var ele = document.getElementById('zipload');
-  ele.addEventListener('change', function(){
-    if (!ele.files[0]) return;
-    loadZip(ele.files[0]);
+  var zipEle = document.getElementById('zipload');
+  zipEle.addEventListener('change', function(){
+    if (!zipEle.files[0]) return;
+    loadZip(zipEle.files[0]);
   });
 
 });
 
 
 
-
-
-
-
-
-
-var ded = 0;
 function runSubtree(root, then, toExpand) {
   var status = root.querySelector('span');
   if (root.path) {
@@ -483,9 +300,6 @@ function runSubtree(root, then, toExpand) {
       return;
     }
     var wasHidden = ul.style.display === 'none';
-    // if (wasHidden) {
-    //   ul.style.display = '';
-    // }
     var len = children.length;
     var passCount = 0;
     var failCount = 0;
@@ -512,37 +326,9 @@ function runTree(root) {
   for (var i = 0; i < statuses.length; ++i) {
     statuses[i].innerText = '';
   }
-  runSubtree(root, function() { console.log('done'); }, []);
+  runSubtree(root, function(){}, []);
 }
 
-
-
-// load('https://api.github.com/repos/bakkot/test262-web-runner/git/refs/heads/', function then(task, data) {
-//   data = JSON.parse(data);
-//   var sha = data.filter(function(o) {
-//     return o.ref === "refs/heads/master";
-//   })[0].object.sha;
-
-//   load('https://api.github.com/repos/bakkot/test262-web-runner/git/trees/' + sha + '?recursive=1', function then(task, data) {
-//     console.log(JSON.parse(data));
-//     complete(task);
-//   }, complete, true);
-
-//   complete(task);
-// }, complete)
-
-
-// function recur(path, container) {
-//   function handleSubtree(task, data) {
-//     data.forEach(function(item) {
-//       loadSubtree(item.path, item.element, handleSubtree);
-//     });
-//     complete(task);
-//   }
-
-//   loadSubtree(path, container, handleSubtree);
-// }
-// // recur('test/annexB/built-ins', document.getElementById('tree'));
 
 
 // document.getElementById('zipload').click();
@@ -581,7 +367,6 @@ function renderTree(tree, container, path, hide) {
   Object.keys(tree).sort().forEach(function(key) {
     var item = tree[key];
     var li = document.createElement('li');
-    item.element = li; // mutating cached data, woo
     if (item.type === 'dir') {
       li.innerText = '[+] ' + item.name;
       var status = li.appendChild(document.createElement('span'));
@@ -603,24 +388,9 @@ function renderTree(tree, container, path, hide) {
       var status = li.appendChild(document.createElement('span'));
       status.style.paddingLeft = '5px';
       li.addEventListener('click', function(e) {
-        //console.log(li.path);
-        //return;
         if (e.target !== li) return;
         e.stopPropagation();
-        load(li.path, function(task, data) {
-          runTest262Test(data, function() {
-            status.innerText = 'Pass!';
-            status.className = 'pass';
-          }, function(msg) {
-            status.innerText = msg;
-            status.className = 'fail';
-          });
-          complete(task);
-        }, function(task) {
-          status.innerText = 'Load failed.';
-          status.className = 'fail';
-          complete(task);
-        });
+        runTree(e.target);
       });
     }
     list.appendChild(li);
