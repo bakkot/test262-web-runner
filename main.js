@@ -43,9 +43,12 @@ function enqueueSimple(fn) {
   });
 }
 
-function loadUnit(url, noCache) {
+function loadUnit(path, noCache) {
   return function(then, error) {
     return function(task) {
+      var file = path.reduce(function(acc, name) { return acc.files[name]; }, tree).file;
+      file.async("string").then(function(c) { then(task, c); }, function(e) { error(task); });
+      return;
       if (!noCache && cache.hasOwnProperty(url)) {
         if (cache[url].pending) {
           cache[url].pending.push({ task: task, then: then, error: error });
@@ -83,20 +86,20 @@ function loadUnit(url, noCache) {
   };
 }
 
-function loadTask(url, then, error, noCache) {
-  return loadUnit(url, noCache)(then, error);
+function loadTask(path, then, error, noCache) {
+  return loadUnit(path, noCache)(then, error);
 }
 
-function load(url, then, error, noCache) {
+function load(path, then, error, noCache) {
   // 'then' takes 'task' as its first parameter and calls complete(task) when done.
   // it takes the loaded data as its second parameter.
   // 'error' takes as 'task' as its first parameter and calls complete(task) when done.
 
-  enqueue(loadTask(url, then, error, noCache));
+  enqueue(loadTask(path, then, error, noCache));
 }
 
-function loadUnqueued(url, then, error, noCache) {
-  loadTask(url, then, error, noCache)(null);
+function loadUnqueued(path, then, error, noCache) {
+  loadTask(path, then, error, noCache)(null);
 }
 
 function enqueueAll(units, then, error) {
@@ -153,12 +156,12 @@ function runAllUnqueued(units, then, error) {
   });
 }
 
-function loadAll(urls, then, error) {
-  enqueueAll(urls.map(loadUnit), then, error);
+function loadAll(paths, then, error) {
+  enqueueAll(paths.map(loadUnit), then, error);
 }
 
-function loadAllUnqueued(urls, then, error) {
-  runAllUnqueued(urls.map(loadUnit), then, error);
+function loadAllUnqueued(paths, then, error) {
+  runAllUnqueued(paths.map(loadUnit), then, error);
 }
 
 // end cache/fetch primitives
@@ -319,7 +322,7 @@ function runTest262Test(src, pass, fail) {
     src += 'throw new Error("NotEarlyError");\n';
   }
 
-  loadAllUnqueued(alwaysIncludes.concat(meta.includes).map(function(include) { return './test262/harness/' + include; }), function(includeSrcs) {
+  loadAllUnqueued(alwaysIncludes.concat(meta.includes).map(function(include) { return ['harness', include]; }), function(includeSrcs) {
     if (!meta.flags.strict) {
       // run in both strict and non-strict.
       runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
@@ -583,7 +586,7 @@ function renderTree(tree, container, path, hide) {
       li.innerText = '[+] ' + item.name;
       var status = li.appendChild(document.createElement('span'));
       status.style.paddingLeft = '5px';
-      renderTree(item.files, li, path + item.name + '/', true);
+      renderTree(item.files, li, path.concat([item.name]), true);
       li.addEventListener('click', function(e) {
         if (e.target !== li) return;
         e.stopPropagation();
@@ -596,13 +599,15 @@ function renderTree(tree, container, path, hide) {
       });
     } else {
       li.innerText = item.name;
-      li.path = path + item.name; // todo find a better way of doing this
+      li.path = path.concat([item.name]); // todo find a better way of doing this
       var status = li.appendChild(document.createElement('span'));
       status.style.paddingLeft = '5px';
       li.addEventListener('click', function(e) {
+        //console.log(li.path);
+        //return;
         if (e.target !== li) return;
         e.stopPropagation();
-        load(path + item.name, function(task, data) {
+        load(li.path, function(task, data) {
           runTest262Test(data, function() {
             status.innerText = 'Pass!';
             status.className = 'pass';
@@ -625,15 +630,16 @@ function renderTree(tree, container, path, hide) {
 
 // (files, document.getElementById('tree'), './test262/test/', false);
 
+var tree; // global variables are fun!
 function loadZip(z) {
   JSZip.loadAsync(z).then(z => {
-    var tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/_FIXTURE\.js/); });
+    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/_FIXTURE\.js/); });
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
       throw "Doesn't look like a test262 bundle to me!";
     }
-    renderTree(tree.files.test.files, document.getElementById('tree'), './test262/test/', false);
+    renderTree(tree.files.test.files, document.getElementById('tree'), ['test'], false);
   });
 }
 
