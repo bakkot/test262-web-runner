@@ -163,7 +163,7 @@ function runSources(sources, done) {
     var timeout;
     var w = iframe.contentWindow;
     w.addEventListener('error', function(e) { err = e; });
-    w.done = function(){
+    w.$$testFinished = function(){
       clearTimeout(timeout);
       done(err, w);
       document.body.removeChild(iframe);
@@ -176,7 +176,7 @@ function runSources(sources, done) {
     }
 
     sources.forEach(append);
-    append('done();');
+    append('$$testFinished();');
 
     if (err === errSigil) {
       timeout = setTimeout(wait, function() {
