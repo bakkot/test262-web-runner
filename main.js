@@ -442,10 +442,11 @@ window.addEventListener('load', function() {
 
 
 var ded = 0;
-function runSubtree(root, then) {
+function runSubtree(root, then, toExpand) {
   var status = root.querySelector('span');
   if (root.path) {
     load(root.path, function(task, data) {
+      toExpand.forEach(function(ele) { ele.style.display = '' });
       runTest262Test(data, function() {
         status.innerText = 'Pass!';
         status.className = 'pass';
@@ -471,9 +472,9 @@ function runSubtree(root, then) {
       return;
     }
     var wasHidden = ul.style.display === 'none';
-    if (wasHidden) {
-      ul.style.display = '';
-    }
+    // if (wasHidden) {
+    //   ul.style.display = '';
+    // }
     var len = children.length;
     var passCount = 0;
     var failCount = 0;
@@ -490,7 +491,7 @@ function runSubtree(root, then) {
           status.className = failCount === 0 ? 'pass' : 'fail';
           then(passCount, failCount);
         }
-      });
+      }, (i === 0 && wasHidden) ? toExpand.concat([ul]) : []);
     }
   }
 }
@@ -500,7 +501,7 @@ function runTree(root) {
   for (var i = 0; i < statuses.length; ++i) {
     statuses[i].innerText = '';
   }
-  runSubtree(root, function() { console.log('done'); });
+  runSubtree(root, function() { console.log('done'); }, []);
 }
 
 
