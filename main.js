@@ -405,53 +405,56 @@ window.addEventListener('load', function() {
 
 
 
-
-function runUnit(root) {
-  return function(then, error) {
-    return function(task) {
-      
-    };
-  };
-}
-
-
-
-var delays = 0;
-function runAll(root) {
-  //console.log(root.children[0].children)
+var ded = 0;
+function runSubtree(root, then) {
   if (root.path) {
-    // i.e. is a file
     var status = root.querySelector('span');
-    var task = delay((delays++)*100, loadTask(root.path, function(task, data) {
+    enqueue(loadTask(root.path, function(task, data) {
       runTest262Test(data, function() {
         status.innerText = 'Pass!';
         status.className = 'pass';
+        then();
       }, function(msg) {
         status.innerText = msg;
         status.className = 'fail';
+        then();
       });
       complete(task);
     }, function(task) {
       status.innerText = 'Load failed.';
       status.className = 'fail';
+      then();
       complete(task);
     }));
-    enqueue(task);
   } else {
-    enqueueSimple(function() {
-      root.click();
-    });
-    var children = root.querySelector('ul').children;
-    for (var i = 0; i < children.length; ++i) {
-      // var fn = (function(child) { return function() { runAll(child); } })(children[i]); // avoid loop-closure issues
-      // enqueueSimple(fn);
-      runAll(children[i]);
+    var doneCount = 0;
+    var ul = root.querySelector('ul');
+    var children = ul.children;
+    if (children.length === 0) {
+      then();
+      return;
     }
-    enqueueSimple(function() {
-      root.click();
-    });
+    var wasHidden = ul.style.display === 'none';
+    if (wasHidden) {
+      ul.style.display = '';
+    }
+    var len = children.length;
+    for (var i = 0; i < len; ++i) {
+      runSubtree(children[i], function() {
+        ++doneCount;
+        if (doneCount === len) {
+          if (wasHidden) {
+            ul.style.display = 'none';
+          }
+          then();
+        }
+      });
+    }
   }
 }
+
+
+
 
 
 // load('https://api.github.com/repos/bakkot/test262-web-runner/git/refs/heads/', function then(task, data) {
