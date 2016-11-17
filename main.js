@@ -1,6 +1,6 @@
 var runningTasks = [];
 var backlogTasks = [];
-var maxRunningTasks = 1;
+var maxRunningTasks = 4;
 
 var cache = {};
 
@@ -95,6 +95,10 @@ function load(url, then, error, noCache) {
   enqueue(loadTask(url, then, error, noCache));
 }
 
+function loadUnqueued(url, then, error, noCache) {
+  loadTask(url, then, error, noCache)(null);
+}
+
 function enqueueAll(units, then, error) {
   if (units.length === 0) {
     then([]);
@@ -123,8 +127,38 @@ function enqueueAll(units, then, error) {
   });
 }
 
+function runAllUnqueued(units, then, error) {
+  if (units.length === 0) {
+    then([]);
+    return;
+  }
+  var ok = true;
+  var count = 0;
+  var results = Array(units.length);
+  units.forEach(function(unit, i) {
+    unit(function(task, data) {
+      if (ok) {
+        results[i] = data;
+        ++count;
+        if (count === results.length) {
+          then(results);
+        }
+      }
+    }, function(task) {
+      if (ok) {
+        ok = false;
+        error();
+      }
+    })(null);
+  });
+}
+
 function loadAll(urls, then, error) {
   enqueueAll(urls.map(loadUnit), then, error);
+}
+
+function loadAllUnqueued(urls, then, error) {
+  runAllUnqueued(urls.map(loadUnit), then, error);
 }
 
 // end cache/fetch primitives
@@ -285,7 +319,7 @@ function runTest262Test(src, pass, fail) {
     src += 'throw new Error("NotEarlyError");\n';
   }
 
-  loadAll(alwaysIncludes.concat(meta.includes).map(function(include) { return './test262/harness/' + include; }), function(includeSrcs) {
+  loadAllUnqueued(alwaysIncludes.concat(meta.includes).map(function(include) { return './test262/harness/' + include; }), function(includeSrcs) {
     if (!meta.flags.strict) {
       // run in both strict and non-strict.
       runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
@@ -409,7 +443,7 @@ var ded = 0;
 function runSubtree(root, then) {
   if (root.path) {
     var status = root.querySelector('span');
-    enqueue(delay(100, loadTask(root.path, function(task, data) {
+    load(root.path, function(task, data) {
       runTest262Test(data, function() {
         status.innerText = 'Pass!';
         status.className = 'pass';
@@ -425,8 +459,7 @@ function runSubtree(root, then) {
       status.innerText = 'Load failed.';
       status.className = 'fail';
       then();
-      complete(task);
-    })));
+    });
   } else {
     var doneCount = 0;
     var ul = root.querySelector('ul');
