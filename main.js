@@ -296,6 +296,7 @@ function runSubtree(root, then, toExpand) {
         then(0, 1);
         complete(task);
       }, function(msg) {
+        console.log(root.path.join('/'), msg);
         status.textContent = msg;
         status.className = 'fail';
         root.passes = 0;
