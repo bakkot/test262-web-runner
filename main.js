@@ -30,65 +30,81 @@ function complete(task) {
   }
 }
 
-function delay(task, wait) {
+function delay(wait, task) {
   return function(me) {
     setTimeout(function() { task(me); }, wait);
   };
 }
 
+function enqueueSimple(fn) {
+  enqueue(function(task) {
+    fn();
+    complete(task);
+  });
+}
+
+function loadUnit(url, noCache) {
+  return function(then, error) {
+    return function(task) {
+      if (!noCache && cache.hasOwnProperty(url)) {
+        if (cache[url].pending) {
+          cache[url].pending.push({ task: task, then: then, error: error });
+        } else {
+          then(task, cache[url].data);        
+        }
+      } else {
+        if (!noCache) cache[url] = {pending: []}; // This will contain any other tasks which are waiting on the same URL while this request is pending.
+        var req = new XMLHttpRequest;
+        req.addEventListener('load', function() {
+          var data = this.responseText;
+          if (noCache) {
+            then(task, data);
+          } else {
+            var waiting = cache[url].pending;
+            cache[url] = {data: data};
+            then(task, data);
+            waiting.forEach(function(obj) { obj.then(obj.task, data); });          
+          }
+        });
+        req.addEventListener('error', function() {
+          if (noCache) {
+            error(task);
+          } else {
+            var waiting = cache[url].pending;
+            delete cache[url];
+            error(task);
+            waiting.forEach(function(obj) { obj.error(obj.task); });
+          }
+        });
+        req.open('GET', url);
+        req.send();
+      }
+    };
+  };
+}
+
+function loadTask(url, then, error, noCache) {
+  return loadUnit(url, noCache)(then, error);
+}
 
 function load(url, then, error, noCache) {
   // 'then' takes 'task' as its first parameter and calls complete(task) when done.
   // it takes the loaded data as its second parameter.
   // 'error' takes as 'task' as its first parameter and calls complete(task) when done.
 
-  enqueue(delay(function(task) {
-    if (!noCache && cache.hasOwnProperty(url)) {
-      if (cache[url].pending) {
-        cache[url].pending.push({ task: task, then: then, error: error });
-      } else {
-        then(task, cache[url].data);        
-      }
-    } else {
-      if (!noCache) cache[url] = {pending: []}; // This will contain any other tasks which are waiting on the same URL while this request is pending.
-      var req = new XMLHttpRequest;
-      req.addEventListener('load', function() {
-        var data = this.responseText;
-        if (noCache) {
-          then(task, data);
-        } else {
-          var waiting = cache[url].pending;
-          cache[url] = {data: data};
-          then(task, data);
-          waiting.forEach(function(obj) { obj.then(obj.task, data); });          
-        }
-      });
-      req.addEventListener('error', function() {
-        if (noCache) {
-          error(task);
-        } else {
-          var waiting = cache[url].pending;
-          delete cache[url];
-          error(task);
-          waiting.forEach(function(obj) { obj.error(obj.task); });
-        }
-      });
-      req.open('GET', url);
-      req.send();
-    }
-  }, 10));
+  enqueue(loadTask(url, then, error, noCache));
 }
 
-function loadAll(urls, then, error) {
-  if (urls.length === 0) {
+function enqueueAll(units, then, error) {
+  if (units.length === 0) {
     then([]);
     return;
   }
   var ok = true;
   var count = 0;
-  var results = Array(urls.length);
-  urls.forEach(function(url, i) {
-    load(url, function(task, data) {
+  var results = Array(units.length);
+  units.forEach(function(unit, i) {
+    enqueue(unit(function(task, data) {
       if (ok) {
         results[i] = data;
         ++count;
@@ -103,8 +119,12 @@ function loadAll(urls, then, error) {
         error();
       }
       complete(task);
-    });
+    }));
   });
+}
+
+function loadAll(urls, then, error) {
+  enqueueAll(urls.map(loadUnit), then, error);
 }
 
 // end cache/fetch primitives
@@ -279,20 +299,6 @@ function runTest262Test(src, pass, fail) {
   });
 }
 
-function runSingle(url) {
-  load(url, function(task, data) {
-    runTest262Test(data, function() {
-      console.log('Pass!');
-    }, function(msg) {
-      console.error('Fail', msg);
-    });
-    complete(task);
-  }, function(task) {
-    console.error('Load failed.');
-    complete(task);
-  });
-}
-
 // end runner primitive
 
 
@@ -361,6 +367,7 @@ window.addEventListener('load', function() {
         });
       } else {
         li.innerText = item.name;
+        li.path = path + item.name; // todo find a better way of doing this
         var status = li.appendChild(document.createElement('span'));
         status.style.paddingLeft = '5px';
         li.addEventListener('click', function(e) {
@@ -389,6 +396,63 @@ window.addEventListener('load', function() {
 
   //runTest262Test('1 1');
 });
+
+
+
+
+
+
+
+
+
+
+function runUnit(root) {
+  return function(then, error) {
+    return function(task) {
+      
+    };
+  };
+}
+
+
+
+var delays = 0;
+function runAll(root) {
+  //console.log(root.children[0].children)
+  if (root.path) {
+    // i.e. is a file
+    var status = root.querySelector('span');
+    var task = delay((delays++)*100, loadTask(root.path, function(task, data) {
+      runTest262Test(data, function() {
+        status.innerText = 'Pass!';
+        status.className = 'pass';
+      }, function(msg) {
+        status.innerText = msg;
+        status.className = 'fail';
+      });
+      complete(task);
+    }, function(task) {
+      status.innerText = 'Load failed.';
+      status.className = 'fail';
+      complete(task);
+    }));
+    enqueue(task);
+  } else {
+    enqueueSimple(function() {
+      root.click();
+    });
+    var children = root.querySelector('ul').children;
+    for (var i = 0; i < children.length; ++i) {
+      // var fn = (function(child) { return function() { runAll(child); } })(children[i]); // avoid loop-closure issues
+      // enqueueSimple(fn);
+      runAll(children[i]);
+    }
+    enqueueSimple(function() {
+      root.click();
+    });
+  }
+}
+
 
 // load('https://api.github.com/repos/bakkot/test262-web-runner/git/refs/heads/', function then(task, data) {
 //   data = JSON.parse(data);
