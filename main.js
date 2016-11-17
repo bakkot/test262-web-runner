@@ -388,6 +388,8 @@ window.addEventListener('load', function() {
       item.element = li; // mutating cached data, woo
       if (item.type === 'dir') {
         li.innerText = '[+] ' + item.name;
+        var status = li.appendChild(document.createElement('span'));
+        status.style.paddingLeft = '5px';
         renderTree(item.files, li, path + item.name + '/', true);
         li.addEventListener('click', function(e) {
           if (e.target !== li) return;
@@ -441,31 +443,31 @@ window.addEventListener('load', function() {
 
 var ded = 0;
 function runSubtree(root, then) {
+  var status = root.querySelector('span');
   if (root.path) {
-    var status = root.querySelector('span');
     load(root.path, function(task, data) {
       runTest262Test(data, function() {
         status.innerText = 'Pass!';
         status.className = 'pass';
-        then();
+        then(1, 0);
         complete(task);
       }, function(msg) {
         status.innerText = msg;
         status.className = 'fail';
-        then();
+        then(0, 1);
         complete(task);
       });
     }, function(task) {
       status.innerText = 'Load failed.';
       status.className = 'fail';
-      then();
+      then(0, 1);
     });
   } else {
     var doneCount = 0;
     var ul = root.querySelector('ul');
     var children = ul.children;
     if (children.length === 0) {
-      then();
+      then(0, 0);
       return;
     }
     var wasHidden = ul.style.display === 'none';
@@ -473,14 +475,20 @@ function runSubtree(root, then) {
       ul.style.display = '';
     }
     var len = children.length;
+    var passCount = 0;
+    var failCount = 0;
     for (var i = 0; i < len; ++i) {
-      runSubtree(children[i], function() {
+      runSubtree(children[i], function(passes, fails) {
         ++doneCount;
+        passCount += passes;
+        failCount += fails;
         if (doneCount === len) {
           if (wasHidden) {
             ul.style.display = 'none';
           }
-          then();
+          status.innerText = '' + passCount + ' / ' + (passCount + failCount);
+          status.className = failCount === 0 ? 'pass' : 'fail';
+          then(passCount, failCount);
         }
       });
     }
@@ -492,7 +500,7 @@ function runTree(root) {
   for (var i = 0; i < statuses.length; ++i) {
     statuses[i].innerText = '';
   }
-  runSubtree(root, function(){ console.log('done'); });
+  runSubtree(root, function() { console.log('done'); });
 }
 
 
