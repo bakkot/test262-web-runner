@@ -1,6 +1,6 @@
 var runningTasks = [];
 var backlogTasks = [];
-var maxRunningTasks = 4;
+var maxRunningTasks = 1;
 
 var cache = {};
 
@@ -409,23 +409,24 @@ var ded = 0;
 function runSubtree(root, then) {
   if (root.path) {
     var status = root.querySelector('span');
-    enqueue(loadTask(root.path, function(task, data) {
+    enqueue(delay(100, loadTask(root.path, function(task, data) {
       runTest262Test(data, function() {
         status.innerText = 'Pass!';
         status.className = 'pass';
         then();
+        complete(task);
       }, function(msg) {
         status.innerText = msg;
         status.className = 'fail';
         then();
+        complete(task);
       });
-      complete(task);
     }, function(task) {
       status.innerText = 'Load failed.';
       status.className = 'fail';
       then();
       complete(task);
-    }));
+    })));
   } else {
     var doneCount = 0;
     var ul = root.querySelector('ul');
@@ -453,7 +454,13 @@ function runSubtree(root, then) {
   }
 }
 
-
+function runTree(root) {
+  var statuses = root.querySelectorAll('span');
+  for (var i = 0; i < statuses.length; ++i) {
+    statuses[i].innerText = '';
+  }
+  runSubtree(root, function(){ console.log('done'); });
+}
 
 
 
