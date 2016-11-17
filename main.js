@@ -418,8 +418,8 @@ function loadZip(z) {
 
 // end tree rendering / running stuff
 
-var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
-// var zipballUrl =
+// var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
+var zipballUrl = 'tc39-test262-84e6ba8.zip';
 
 window.addEventListener('load', function() {
   var fileEle = document.getElementById('fileLoader');
