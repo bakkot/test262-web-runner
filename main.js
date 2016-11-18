@@ -2,7 +2,7 @@
 
 var runningTasks = [];
 var backlogTasks = [];
-var maxRunningTasks = 16;
+var maxRunningTasks = 32;
 
 var ref = '';
 var repo = 'https://api.github.com/repos/tc39/test262/contents/';
@@ -156,18 +156,21 @@ function parseFrontmatter(src) {
 var errSigil = {};
 var wait = 50; // ms
 var iframeSrc = ''; // will be set to './blank.html' if the environment does not report error details when src = ''.
-function runSources(sources, done) {
-  var iframe = document.createElement('iframe');
+var iframes = [];
 
-  iframe.addEventListener('load', function() {
+function runSources(sources, done) {
+  var iframe = iframes.pop();
+
+  var listener = function() {
     var err = errSigil;
     var timeout;
     var w = iframe.contentWindow;
     w.addEventListener('error', function(e) { err = e; });
     w.$$testFinished = function(){
       clearTimeout(timeout);
+      iframe.removeEventListener('load', listener);
+      iframes.push(iframe);
       done(err, w);
-      document.body.removeChild(iframe);
     };
 
     function append(src) {
@@ -182,15 +185,16 @@ function runSources(sources, done) {
     if (err === errSigil) { // todo maybe delete
       timeout = setTimeout(wait, function() {
         console.error('done not invoked!');
+        iframe.removeEventListener('load', listener);
+        iframes.push(iframe);
         done(null);
-        document.body.removeChild(iframe);
       });
     }
-  });
+  };
+
+  iframe.addEventListener('load', listener);
 
   iframe.src = iframeSrc;
-  iframe.style.display = 'none';
-  document.body.appendChild(iframe);
 }
 
 function checkErrorType(errorEvent, global, kind) {
@@ -522,6 +526,13 @@ window.addEventListener('load', function() {
     req.responseType = 'arraybuffer'; // todo check support
     req.send();
   });
+
+  // Make some realms
+  for (var i = 0; i < maxRunningTasks; ++i) {
+    var iframe = document.body.appendChild(document.createElement('iframe'));
+    iframe.style.display = 'none';
+    iframes.push(iframe);
+  }
 
   // Check if the environment reports errors from iframes with src = ''.
   runSources(['throw new Error;'], function(e) {
