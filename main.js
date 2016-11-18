@@ -155,6 +155,7 @@ function parseFrontmatter(src) {
 
 var errSigil = {};
 var wait = 50; // ms
+var iframeSrc = ''; // will be set to './blank.html' if the environment does not report error details when src = ''.
 function runSources(sources, done) {
   var iframe = document.createElement('iframe');
 
@@ -178,7 +179,7 @@ function runSources(sources, done) {
     sources.forEach(append);
     append('$$testFinished();');
 
-    if (err === errSigil) {
+    if (err === errSigil) { // todo maybe delete
       timeout = setTimeout(wait, function() {
         console.error('done not invoked!');
         done(null);
@@ -187,7 +188,7 @@ function runSources(sources, done) {
     }
   });
 
-  iframe.src = './blank.html';
+  iframe.src = iframeSrc;
   iframe.style.display = 'none';
   document.body.appendChild(iframe);
 }
@@ -365,8 +366,8 @@ function runTree(root) {
   for (var i = 0; i < buttons.length; ++i) {
     buttons[i].parentNode.removeChild(buttons[i]);
   }
-  console.time();
-  runSubtree(root, function(){console.timeEnd();}, []);
+  // console.time();
+  runSubtree(root, function(){/*console.timeEnd();*/}, []);
 }
 
 function addRunLink(ele) {
@@ -520,6 +521,13 @@ window.addEventListener('load', function() {
     req.open('GET', zipballUrl);
     req.responseType = 'arraybuffer'; // todo check support
     req.send();
+  });
+
+  // Check if the environment reports errors from iframes with src = ''.
+  runSources(['throw new Error;'], function(e) {
+    if (e.message.match(/Script error\./i)) {
+      iframeSrc = 'blank.html';
+    }
   });
 });
 
