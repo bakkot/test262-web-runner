@@ -331,6 +331,7 @@ function runSubtree(root, then, toExpand) {
       root.fails = 0;
       root.skips = 1;
       then(0, 0, 1);
+      complete(task);
     });
   } else {
     var doneCount = 0;
@@ -368,17 +369,13 @@ function runSubtree(root, then, toExpand) {
 }
 
 function runTree(root) {
-  var buttons = root.querySelectorAll('input');
-  for (var i = 0; i < buttons.length; ++i) {
-    buttons[i].parentNode.removeChild(buttons[i]);
-  }
   console.time();
   runSubtree(root, function(){console.timeEnd();}, []);
 }
 
 function addRunLink(ele) {
   var status = ele.appendChild(document.createElement('span'));
-  status.style.paddingLeft = '5px';
+  status.style.marginLeft = '5px';
 
   var runLink = status.appendChild(document.createElement('input'));
   runLink.type = 'button';
@@ -398,11 +395,25 @@ function renderTree(tree, container, path, hide) {
     var li = document.createElement('li');
     li.textContent = (item.type === 'dir' ? '[+] ' : '') + item.name;
 
-    addRunLink(li);
 
     if (item.type === 'file') {
+      var srcLink = li.appendChild(document.createElement('input'));
+      srcLink.type = 'button';
+      srcLink.value = 'Src';
+      srcLink.className = 'btn btn-default btn-xs';
+      srcLink.style.marginLeft = '5px';
+      srcLink.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var w = window.open(iframeSrc);
+        loadUnit(li.path)(function(task, data) {
+          var pre = w.document.body.appendChild(w.document.createElement('pre'));
+          pre.textContent = data;
+        }, function(){ console.error('Error loading file. This shouldn\'t happen...'); })(null);
+      });
+      addRunLink(li);
       li.path = path.concat([item.name]);
     } else {
+      addRunLink(li);
       renderTree(item.files, li, path.concat([item.name]), true);
       li.addEventListener('click', function(e) {
         if (e.target !== li) return;
