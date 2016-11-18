@@ -258,24 +258,20 @@ function runTest262Test(src, pass, fail, skip) {
     src = 'throw new Error("NotEarlyError");\n' + src;
   }
 
-  loadAllUnqueued(alwaysIncludes.concat(meta.includes).map(function(include) { return ['harness', include]; }), function(includeSrcs) {
+  var includeSrcs = alwaysIncludes.concat(meta.includes).map(function(include) { return harness[include]; });
+  // cleanup of global object. would be nice to also delete window.top, but we can't.
+  if (src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
+    includeSrcs.push('delete window.name;\ndelete window.length;');
+  }
 
-    // cleanup of global object. would be nice to also delete window.top, but we can't.
-    if (src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
-      includeSrcs.push('delete window.name;\ndelete window.length;');
-    }
-
-    if (!meta.flags.strict) {
-      // run in both strict and non-strict
-      runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
-        runSources(includeSrcs.concat([src]), checkErr(meta.negative, pass, fail));
-      }, fail));
-    } else {
-      runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), checkErr(meta.negative, pass, fail));
-    }
-  }, function() {
-    skip('Error loading test data.');
-  });
+  if (!meta.flags.strict) {
+    // run in both strict and non-strict
+    runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
+      runSources(includeSrcs.concat([src]), checkErr(meta.negative, pass, fail));
+    }, fail));
+  } else {
+    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), checkErr(meta.negative, pass, fail));
+  }
 }
 
 // tree rendering / running
@@ -369,7 +365,8 @@ function runTree(root) {
   for (var i = 0; i < buttons.length; ++i) {
     buttons[i].parentNode.removeChild(buttons[i]);
   }
-  runSubtree(root, function(){}, []);
+  console.time();
+  runSubtree(root, function(){console.timeEnd();}, []);
 }
 
 function addRunLink(ele) {
@@ -445,6 +442,7 @@ function getStructure(zip, predicate) {
 }
 
 var tree; // global variables are fun!
+var harness = {};
 function loadZip(z) {
   return JSZip.loadAsync(z).then(function(z) {
     tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/(^\.)|(_FIXTURE\.js$)/); });
@@ -453,10 +451,18 @@ function loadZip(z) {
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
       throw new Error("Doesn't look like a test262 bundle.");
     }
-    var treeEle = document.getElementById('tree');
-    treeEle.textContent = 'Tests:';
-    addRunLink(treeEle);
-    renderTree(tree.files.test.files, treeEle, ['test'], false);
+    var harnessNames = Object.keys(tree.files.harness.files);
+    loadAllUnqueued(harnessNames.map(function(include) { return ['harness', include]; }), function(harnessFiles) {
+      for (var i = 0; i < harnessNames.length; ++i) {
+        harness[harnessNames[i]] = harnessFiles[i];
+      }
+      var treeEle = document.getElementById('tree');
+      treeEle.textContent = 'Tests:';
+      addRunLink(treeEle);
+      renderTree(tree.files.test.files, treeEle, ['test'], false);
+    }, function(e) {
+      throw e;
+    });
   });
 }
 
@@ -472,6 +478,7 @@ window.addEventListener('load', function() {
 
   fileEle.addEventListener('change', function() {
     if (!fileEle.files[0]) return;
+    loadStatus.textContent = 'Reading...';
     loadZip(fileEle.files[0])
       .then(function() { buttons.style.display = 'none'; })
       .catch(function(e) { loadStatus.textContent = e; });
@@ -486,7 +493,7 @@ window.addEventListener('load', function() {
     var req = new XMLHttpRequest;
 
     req.addEventListener('load', function() {
-      loadStatus.textContent = 'Loaded!';
+      loadStatus.textContent = 'Reading...';
       loadZip(req.response)
         .then(function() { buttons.style.display = 'none'; })
         .catch(function(e) { loadStatus.textContent = e; });
