@@ -2,7 +2,7 @@
 
 var runningTasks = [];
 var backlogTasks = [];
-var maxRunningTasks = 4;
+var maxRunningTasks = 16;
 
 var ref = '';
 var repo = 'https://api.github.com/repos/tc39/test262/contents/';
@@ -366,8 +366,8 @@ function runTree(root) {
   for (var i = 0; i < buttons.length; ++i) {
     buttons[i].parentNode.removeChild(buttons[i]);
   }
-  // console.time();
-  runSubtree(root, function(){/*console.timeEnd();*/}, []);
+  console.time();
+  runSubtree(root, function(){console.timeEnd();}, []);
 }
 
 function addRunLink(ele) {
