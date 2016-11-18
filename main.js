@@ -269,6 +269,8 @@ function runTest262Test(src, pass, fail, skip) {
     includeSrcs.push('delete window.name;\ndelete window.length;');
   }
 
+  includeSrcs = [includeSrcs.join(';\n')];
+
   if (!meta.flags.strict) {
     // run in both strict and non-strict
     runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
