@@ -270,8 +270,7 @@ function runTest262Test(src, pass, fail, skip) {
     return;
   }
 
-  if (meta.flags.module || meta.flags.raw || meta.flags.async) {
-    // todo support flags, support $
+  if (meta.flags.module || meta.flags.async) {
     skip('Test runner does not yet support flags: ' + JSON.stringify(meta.flags));
     return;
   }
@@ -282,11 +281,17 @@ function runTest262Test(src, pass, fail, skip) {
 
   var includeSrcs = alwaysIncludes.concat(meta.includes).map(function(include) { return harness[include]; });
   // cleanup of global object. would be nice to also delete window.top, but we can't.
-  if (src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
+  if (!meta.flags.raw && src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
     includeSrcs.push('delete window.name;\ndelete window.length;');
   }
 
   includeSrcs = [includeSrcs.join(';\n')];
+
+  if (meta.flags.raw) {
+    // Note: we cannot assert phase for these, so false positives are possible.
+    runSources(includeSrcs.concat([src]), checkErr(meta.negative, pass, fail));
+    return;
+  }
 
   if (!meta.flags.strict) {
     // run in both strict and non-strict
