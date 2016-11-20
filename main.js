@@ -182,7 +182,7 @@ function runSources(sources, done) {
     sources.forEach(append);
     append('$$testFinished();');
 
-    if (err === errSigil) { // todo maybe delete
+    if (err === errSigil) { // todo this does not appear to be necessary
       timeout = setTimeout(wait, function() {
         console.error('done not invoked!');
         iframe.removeEventListener('load', listener);
@@ -283,6 +283,38 @@ function runTest262Test(src, pass, fail, skip) {
 
 // tree rendering / running
 
+function makeFailEle(path, msg) {
+  var ele = document.createElement('li');
+  var pathSpan = ele.appendChild(document.createElement('span'));
+  pathSpan.style.fontFamily = 'monospace';
+  pathSpan.textContent = path.slice(1).join('/');
+  addSrcLink(ele, path);
+  var msgEle = ele.appendChild(document.createElement('p'));
+  msgEle.textContent = msg;
+  // msgEle.className = 'fail fail-message';
+  return ele;
+}
+
+var failedTests = [];
+function addFailure(path, msg) {
+  failedTests.push({path: path, ele: makeFailEle(path, msg)});
+  failedTests.sort(function(a, b) {
+    if (a.path < b.path) {
+      return -1;
+    } else if (b.path < a.path) {
+      return 1;
+    } else {
+      return 0;
+    }
+  });
+  document.getElementById('failures').style.display = '';
+  var failList = document.getElementById('failList');
+  failList.innerHTML = '';
+  failedTests.forEach(function(o) {
+    failList.appendChild(o.ele);
+  });
+}
+
 function runSubtree(root, then, toExpand) {
   if (root.passes) {
     then(root.passes, root.fails, root.skips);
@@ -308,8 +340,9 @@ function runSubtree(root, then, toExpand) {
         then(1, 0, 0);
         complete(task);
       }, function(msg) {
+        addFailure(root.path, msg);
         status.textContent = msg;
-        status.className = 'fail';
+        status.className = 'fail fail-message';
         root.passes = 0;
         root.fails = 1;
         root.skips = 0;
@@ -387,6 +420,22 @@ function addRunLink(ele) {
   });
 }
 
+function addSrcLink(ele, path) {
+  var srcLink = ele.appendChild(document.createElement('input'));
+  srcLink.type = 'button';
+  srcLink.value = 'Src';
+  srcLink.className = 'btn btn-default btn-xs';
+  srcLink.style.marginLeft = '5px';
+  srcLink.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var w = window.open(iframeSrc);
+    loadUnit(path)(function(task, data) {
+      var pre = w.document.body.appendChild(w.document.createElement('pre'));
+      pre.textContent = data;
+    }, function(){ console.error('Error loading file. This shouldn\'t happen...'); })(null);
+  });
+}
+
 function renderTree(tree, container, path, hide) {
   var list = container.appendChild(document.createElement('ul'));
   Object.keys(tree).sort().forEach(function(key) {
@@ -397,19 +446,7 @@ function renderTree(tree, container, path, hide) {
 
 
     if (item.type === 'file') {
-      var srcLink = li.appendChild(document.createElement('input'));
-      srcLink.type = 'button';
-      srcLink.value = 'Src';
-      srcLink.className = 'btn btn-default btn-xs';
-      srcLink.style.marginLeft = '5px';
-      srcLink.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var w = window.open(iframeSrc);
-        loadUnit(li.path)(function(task, data) {
-          var pre = w.document.body.appendChild(w.document.createElement('pre'));
-          pre.textContent = data;
-        }, function(){ console.error('Error loading file. This shouldn\'t happen...'); })(null);
-      });
+      addSrcLink(li, path.concat([item.name]));
       addRunLink(li);
       li.path = path.concat([item.name]);
     } else {
@@ -538,6 +575,11 @@ window.addEventListener('load', function() {
     req.open('GET', zipballUrl);
     req.responseType = 'arraybuffer'; // todo check support
     req.send();
+  });
+
+  document.getElementById('failuresToggle').addEventListener('click', function() {
+    var failList = document.getElementById('failList');
+    failList.style.display = failList.style.display === 'none' ? '' : 'none';
   });
 
   // Make some realms
