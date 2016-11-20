@@ -27,6 +27,12 @@
 .skip {
 	color: blue;
 }
+#controls {
+  position: fixed;
+  top: 30px;
+  right: 50px;
+}
+
 body {
 	font-size: medium;
 }
@@ -45,6 +51,10 @@ li {
 
 <body>
 <input type="file" accept=".zip" id="fileLoader" style="display: none;">
+<div id="controls" style="display: none;">
+	<input type="button" value="Pause" id="pause" class="btn btn-primary btn-lg" style=";">
+	<input type="button" value="Cancel" id="cancel" class="btn btn-danger btn-lg" style=";">
+</div>
 <div class="container">
 	<div class="page-header">
 		<h1>Test262 Web Runner</h1>

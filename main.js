@@ -1,5 +1,6 @@
 // queue/fetch primitives
 
+var paused = false;
 var runningTasks = [];
 var backlogTasks = [];
 var maxRunningTasks = 32;
@@ -8,7 +9,7 @@ var ref = '';
 var repo = 'https://api.github.com/repos/tc39/test262/contents/';
 
 function enqueue(task) {
-  if (runningTasks.length < maxRunningTasks) {
+  if (!paused && runningTasks.length < maxRunningTasks) {
     runningTasks.push(task);
     task(task);
   } else {
@@ -20,13 +21,29 @@ function complete(task) {
   var index = runningTasks.indexOf(task);
   if (index !== -1) {
     runningTasks.splice(index, 1);
-    if (backlogTasks.length > 0) {
+    if (!paused && backlogTasks.length > 0) {
       var next = backlogTasks.shift();
       runningTasks.push(next);
       next(next);
     }
   } else {
     console.log('task not found', task)
+  }
+}
+
+function pause() {
+  paused = true;
+}
+
+function resume() {
+  // This might cause tasks to be executed out of order if some are synchronous, but whatever.
+  paused = false;
+  var start = runningTasks.length;
+  for (var i = start; backlogTasks.length > 0 && i < maxRunningTasks; ++i) {
+    runningTasks.push(backlogTasks.shift());
+  }
+  for (var i = start; i < runningTasks.length; ++i) {
+    runningTasks[i](runningTasks[i]);
   }
 }
 
@@ -315,6 +332,7 @@ function addFailure(path, msg) {
   });
 }
 
+var activeSubtrees = [];
 function runSubtree(root, then, toExpand) {
   if (root.passes) {
     then(root.passes, root.fails, root.skips);
@@ -323,7 +341,12 @@ function runSubtree(root, then, toExpand) {
   var status = root.querySelector('span');
   if (root.path) { // i.e. is a file
     load(root.path, function(task, data) {
+      if (task.cancelled) {
+        complete(task);
+        return;
+      }
       toExpand.forEach(function(ele) {
+        activeSubtrees.push(ele);
         ele.querySelector('ul').style.display = '';
         var status = ele.querySelector('span');
         status.textContent = 'Working...';
@@ -389,6 +412,10 @@ function runSubtree(root, then, toExpand) {
           if (wasHidden) {
             ul.style.display = 'none';
           }
+          var myIndex = activeSubtrees.indexOf(root);
+          if (myIndex !== -1) {
+            activeSubtrees.splice(myIndex, 1);
+          }
           status.textContent = '' + passCount + ' / ' + (passCount + failCount) + (skipCount > 0 ? ' (skipped ' + skipCount + ')' : '')
           status.className = failCount === 0 ? 'pass' : 'fail';
           root.passes = passCount;
@@ -402,8 +429,23 @@ function runSubtree(root, then, toExpand) {
 }
 
 function runTree(root) {
-  console.time();
-  runSubtree(root, function(){console.timeEnd();}, []);
+  var controls = document.getElementById('controls');
+  controls.style.display = '';
+
+  var runs = document.querySelectorAll('.run');
+  for (var i = 0; i < runs.length; ++i) {
+    runs[i].style.display = 'none';
+  }
+
+  var start = Date.now();
+  runSubtree(root, function(){
+    console.log((Date.now() - start)/1000 + ' seconds');
+
+    controls.style.display = 'none';
+    for (var i = 0; i < runs.length; ++i) {
+      runs[i].style.display = '';
+    }
+  }, []);
 }
 
 function addRunLink(ele) {
@@ -413,7 +455,7 @@ function addRunLink(ele) {
   var runLink = status.appendChild(document.createElement('input'));
   runLink.type = 'button';
   runLink.value = 'Run';
-  runLink.className = 'btn btn-default btn-xs';
+  runLink.className = 'btn btn-default btn-xs run';
   runLink.addEventListener('click', function(e) {
     e.stopPropagation();
     runTree(ele);
@@ -581,6 +623,52 @@ window.addEventListener('load', function() {
     var failList = document.getElementById('failList');
     failList.style.display = failList.style.display === 'none' ? '' : 'none';
   });
+
+  var pauseButton = document.getElementById('pause');
+  pauseButton.addEventListener('click', function() {
+    if (backlogTasks.length === 0) return;
+    if (!paused) {
+      pause();
+      pauseButton.value = 'Resume';
+      pauseButton.className = 'btn btn-success btn-lg';
+    } else {
+      pauseButton.value = 'Pause';
+      pauseButton.className = 'btn btn-primary btn-lg';
+      resume();
+    }
+  });
+
+  document.getElementById('cancel').addEventListener('click', function() {
+    runningTasks.forEach(function(task) { task.cancelled = true; });
+    backlogTasks = [];
+    paused = false;
+
+    document.getElementById('controls').style.display = 'none';
+    pauseButton.value = 'Pause';
+    pauseButton.className = 'btn btn-primary btn-lg';
+
+    for (var i = 0; i < activeSubtrees.length; ++i) {
+      var ele = activeSubtrees[i];
+      var status = ele.querySelector('span');
+      status.textContent = '';
+      status.className = '';
+      var runLink = status.appendChild(document.createElement('input'));
+      runLink.type = 'button';
+      runLink.value = 'Run';
+      runLink.className = 'btn btn-default btn-xs run';
+      runLink.addEventListener('click', (function(ele){return function(e) {
+        e.stopPropagation();
+        runTree(ele);
+      }})(ele));
+    }
+    activeSubtrees = [];
+
+    var runs = document.querySelectorAll('.run');
+    for (var i = 0; i < runs.length; ++i) {
+      runs[i].style.display = '';
+    }
+  });
+
 
   // Make some realms
   for (var i = 0; i < maxRunningTasks; ++i) {
