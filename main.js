@@ -171,24 +171,42 @@ function parseFrontmatter(src) {
 }
 
 var errSigil = {};
-var wait = 50; // ms
+var noCompletionSigil = {};
+var asyncWait = 500; // ms
 var iframeSrc = ''; // will be set to './blank.html' if the environment does not report error details when src = ''.
 var iframes = [];
 
-function runSources(sources, done) {
+function runSources(sources, isAsync, done) {
   var iframe = iframes.pop();
 
   var listener = function() {
+    iframe.removeEventListener('load', listener);
     var err = errSigil;
     var timeout;
     var w = iframe.contentWindow;
-    w.addEventListener('error', function(e) { err = e; });
-    w.$$testFinished = function(){
-      clearTimeout(timeout);
-      iframe.removeEventListener('load', listener);
+    var completed = false;
+
+    w.$$testFinished = function() {
+      if (completed) return;
+      completed = true;
+      if (timeout !== undefined) clearTimeout(timeout);
       iframes.push(iframe);
       done(err, w);
     };
+
+    w.addEventListener('error', function(e) {
+      err = e;
+      w.$$testFinished();
+    });
+
+    if (isAsync) {
+      w.print = function(msg) {
+        if (err === errSigil && msg !== 'Test262:AsyncTestComplete') {
+          err = new w.Error('Error: unexpected message ' + msg);
+        }
+        w.$$testFinished();
+      }
+    }
 
     function append(src) {
       var script = w.document.createElement('script');
@@ -197,14 +215,16 @@ function runSources(sources, done) {
     }
 
     sources.forEach(append);
-    append('$$testFinished();');
 
-    if (err === errSigil) { // todo this does not appear to be necessary
-      timeout = setTimeout(wait, function() {
-        console.error('done not invoked!');
-        iframe.removeEventListener('load', listener);
+    if (!isAsync) {
+      append('$$testFinished();');
+    }
+
+    if (!completed) {
+      timeout = setTimeout(asyncWait, function() {
+        if (completed) return;
         iframes.push(iframe);
-        done(null);
+        done(err === errSigil ? noCompletionSigil : err);
       });
     }
   };
@@ -230,6 +250,8 @@ function checkErr(negative, pass, fail) {
       } else {
         pass();
       }
+    } else if (err === noCompletionSigil) {
+      fail('Test timed out.');
     } else {
       if (negative) {
         if (checkErrorType(err, w, negative.type)) {
@@ -270,8 +292,8 @@ function runTest262Test(src, pass, fail, skip) {
     return;
   }
 
-  if (meta.flags.module || meta.flags.async) {
-    skip('Test runner does not yet support flags: ' + JSON.stringify(meta.flags));
+  if (meta.flags.module) {
+    skip('Test runner does not yet support modules.');
     return;
   }
 
@@ -280,6 +302,11 @@ function runTest262Test(src, pass, fail, skip) {
   }
 
   var includeSrcs = alwaysIncludes.concat(meta.includes).map(function(include) { return harness[include]; });
+
+  if (meta.flags.async) {
+    includeSrcs.push(harness['doneprintHandle.js']); // todo INTERPRETING.md says this should be donePrintHandle
+  }
+
   // cleanup of global object. would be nice to also delete window.top, but we can't.
   if (!meta.flags.raw && src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
     includeSrcs.push('delete window.name;\ndelete window.length;');
@@ -289,17 +316,17 @@ function runTest262Test(src, pass, fail, skip) {
 
   if (meta.flags.raw) {
     // Note: we cannot assert phase for these, so false positives are possible.
-    runSources(includeSrcs.concat([src]), checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([src]), meta.flags.async, checkErr(meta.negative, pass, fail));
     return;
   }
 
   if (!meta.flags.strict) {
     // run in both strict and non-strict
-    runSources(includeSrcs.concat([strict(src)]), checkErr(meta.negative, function() {
-      runSources(includeSrcs.concat([src]), checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([strict(src)]), meta.flags.async, checkErr(meta.negative, function() {
+      runSources(includeSrcs.concat([src]), meta.flags.async, checkErr(meta.negative, pass, fail));
     }, fail));
   } else {
-    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), meta.flags.async, checkErr(meta.negative, pass, fail));
   }
 }
 
@@ -683,7 +710,7 @@ window.addEventListener('load', function() {
   }
 
   // Check if the environment reports errors from iframes with src = ''.
-  runSources(['throw new Error;'], function(e) {
+  runSources(['throw new Error;'], false, function(e) {
     if (e.message.match(/Script error\./i)) {
       iframeSrc = 'blank.html';
     }
