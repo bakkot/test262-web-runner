@@ -1,5 +1,6 @@
 "use strict";
 
+
 // queue/fetch primitives
 
 var paused = false;
@@ -26,7 +27,7 @@ function complete(task) {
       next(next);
     }
   } else {
-    console.log('task not found', task)
+    console.log('task not found', task);
   }
 }
 
@@ -96,7 +97,8 @@ function loadAllUnqueued(paths, then, error) {
   runAllUnqueued(paths.map(loadUnit), then, error);
 }
 
-// harness API
+
+// API
 
 function installAPI(global) {
   return global.$ = {
@@ -127,6 +129,7 @@ function installAPI(global) {
     global: global
   };
 }
+
 
 // test runner primitives
 
@@ -228,12 +231,10 @@ function runSources(sources, isAsync, needsAPI, done) {
       iframes.push(iframe);
       done(err, w);
     };
-
     w.addEventListener('error', function(e) {
       err = e;
       w.$$testFinished();
     });
-
     if (isAsync) {
       w.print = function(msg) {
         if (err === errSigil && msg !== 'Test262:AsyncTestComplete') {
@@ -242,7 +243,6 @@ function runSources(sources, isAsync, needsAPI, done) {
         w.$$testFinished();
       }
     }
-
     function append(src) {
       var script = w.document.createElement('script');
       script.text = src;
@@ -254,7 +254,6 @@ function runSources(sources, isAsync, needsAPI, done) {
     if (!isAsync) {
       append('$$testFinished();');
     }
-
     if (!completed) {
       timeout = setTimeout(asyncWait, function() {
         if (completed) return;
@@ -273,7 +272,7 @@ function checkErrorType(errorEvent, global, kind) {
   if (typeof errorEvent.error === 'object') {
     return errorEvent.error instanceof global[kind];
   } else {
-    return !!errorEvent.message.match(kind); // todo more cleverness
+    return !!errorEvent.message.match(kind); // can give incorrect answers, but in practice this works pretty well.
   }
 }
 
@@ -311,11 +310,6 @@ function strict(src) {
 
 var alwaysIncludes = ['assert.js', 'sta.js'];
 function runTest262Test(src, pass, fail, skip) {
-  // if (src.match(/\$\./)) {
-  //   skip('Test runner does not yet support the "$" API');
-  //   return;
-  // }
-
   var meta = parseFrontmatter(src);
   if (!meta) {
     skip('Test runner couldn\'t parse frontmatter');
@@ -332,13 +326,11 @@ function runTest262Test(src, pass, fail, skip) {
   }
 
   var includeSrcs = alwaysIncludes.concat(meta.includes).map(function(include) { return harness[include]; });
-
   var needsAPI = includeSrcs.some(function(src) { return src.match(/\$\./); }) || src.match(/\$\./);
 
   if (meta.flags.async) {
     includeSrcs.push(harness['doneprintHandle.js']); // todo INTERPRETING.md says this should be donePrintHandle
   }
-
 
   // cleanup of global object. would be nice to also delete window.top, but we can't.
   if (!meta.flags.raw && src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
@@ -352,7 +344,6 @@ function runTest262Test(src, pass, fail, skip) {
     runSources(includeSrcs.concat([src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
     return;
   }
-
   if (!meta.flags.strict) {
     // run in both strict and non-strict
     runSources(includeSrcs.concat([strict(src)]), meta.flags.async, needsAPI, checkErr(meta.negative, function() {
@@ -362,6 +353,7 @@ function runTest262Test(src, pass, fail, skip) {
     runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
   }
 }
+
 
 // tree rendering / running
 
@@ -373,7 +365,6 @@ function makeFailEle(path, msg) {
   addSrcLink(ele, path);
   var msgEle = ele.appendChild(document.createElement('p'));
   msgEle.textContent = msg;
-  // msgEle.className = 'fail fail-message';
   return ele;
 }
 
@@ -551,7 +542,6 @@ function renderTree(tree, container, path, hide) {
     var li = document.createElement('li');
     li.textContent = (item.type === 'dir' ? '[+] ' : '') + item.name;
 
-
     if (item.type === 'file') {
       addSrcLink(li, path.concat([item.name]));
       addRunLink(li);
@@ -629,6 +619,7 @@ function loadZip(z) {
     });
   });
 }
+
 
 // onload
 
@@ -735,7 +726,6 @@ window.addEventListener('load', function() {
       runs[i].style.display = '';
     }
   });
-
 
   // Make some realms
   for (var i = 0; i < maxRunningTasks; ++i) {
