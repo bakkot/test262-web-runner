@@ -99,7 +99,18 @@ function loadAllUnqueued(paths, then, error) {
 // harness API
 
 function installAPI(global) {
-  global.$ = {
+  return global.$ = {
+    createRealm: function() {
+      var iframe = global.document.createElement('iframe');
+      iframe.src = iframeSrc;
+      document.body.appendChild(iframe);
+      return installAPI(iframe.contentWindow);
+    },
+    evalScript: function(src) {
+      var script = global.document.createElement('script');
+      script.text = src;
+      global.document.body.appendChild(script);
+    },
     detachArrayBuffer: function(buffer) {
       if (typeof postMessage !== 'function') {
         throw new Error('No method available to detach an ArrayBuffer');
@@ -112,7 +123,8 @@ function installAPI(global) {
           which calls the DetachArrayBuffer abstract operation https://tc39.github.io/ecma262/#sec-detacharraybuffer
         */
       }
-    }
+    },
+    global: global
   };
 }
 
@@ -739,4 +751,3 @@ window.addEventListener('load', function() {
     }
   });
 });
-
