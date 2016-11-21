@@ -255,11 +255,11 @@ function runSources(sources, isAsync, needsAPI, done) {
       append('$$testFinished();');
     }
     if (!completed) {
-      timeout = setTimeout(asyncWait, function() {
+      timeout = setTimeout(function() {
         if (completed) return;
         iframes.push(iframe);
         done(err === errSigil ? noCompletionSigil : err);
-      });
+      }, asyncWait);
     }
   };
 
@@ -328,8 +328,9 @@ function runTest262Test(src, pass, fail, skip) {
   var includeSrcs = alwaysIncludes.concat(meta.includes).map(function(include) { return harness[include]; });
   var needsAPI = includeSrcs.some(function(src) { return src.match(/\$\./); }) || src.match(/\$\./);
 
-  if (meta.flags.async) {
-    includeSrcs.push(harness['doneprintHandle.js']); // todo INTERPRETING.md says this should be donePrintHandle
+  var isAsync = meta.flags.async || src.match(/\$DONE/) // todo the latter is a hack pending https://github.com/tc39/test262/pull/798
+  if (isAsync) {
+    includeSrcs.push(harness['doneprintHandle.js']); // todo INTERPRETING.md says this should be donePrintHandle cf https://github.com/tc39/test262/issues/791
   }
 
   // cleanup of global object. would be nice to also delete window.top, but we can't.
@@ -341,16 +342,16 @@ function runTest262Test(src, pass, fail, skip) {
 
   if (meta.flags.raw) {
     // Note: we cannot assert phase for these, so false positives are possible.
-    runSources(includeSrcs.concat([src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([src]), isAsync, needsAPI, checkErr(meta.negative, pass, fail));
     return;
   }
   if (!meta.flags.strict) {
     // run in both strict and non-strict
-    runSources(includeSrcs.concat([strict(src)]), meta.flags.async, needsAPI, checkErr(meta.negative, function() {
-      runSources(includeSrcs.concat([src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([strict(src)]), isAsync, needsAPI, checkErr(meta.negative, function() {
+      runSources(includeSrcs.concat([src]), isAsync, needsAPI, checkErr(meta.negative, pass, fail));
     }, fail));
   } else {
-    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), isAsync, needsAPI, checkErr(meta.negative, pass, fail));
   }
 }
 
