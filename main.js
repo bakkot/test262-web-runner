@@ -597,7 +597,7 @@ var tree; // global variables are fun!
 var harness = {};
 function loadZip(z) {
   return JSZip.loadAsync(z).then(function(z) {
-    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/(^\.)|(_FIXTURE\.js$)/); });
+    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/(^\.)|(_FIXTURE\.js$)/) && !path.match(/^__MACOSX/); });
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
@@ -614,8 +614,6 @@ function loadZip(z) {
       treeEle.textContent = 'Tests:';
       addRunLink(treeEle);
       renderTree(tree.files.test.files, treeEle, ['test'], false);
-    }, function(e) {
-      throw e;
     });
   });
 }
@@ -633,6 +631,7 @@ window.addEventListener('load', function() {
 
   fileEle.addEventListener('change', function() {
     if (!fileEle.files[0]) return;
+    loadStatus.style.display = 'inline-block';
     loadStatus.textContent = 'Reading...';
     loadZip(fileEle.files[0])
       .then(function() { buttons.style.display = 'none'; })
