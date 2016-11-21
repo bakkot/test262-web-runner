@@ -1,12 +1,11 @@
+"use strict";
+
 // queue/fetch primitives
 
 var paused = false;
 var runningTasks = [];
 var backlogTasks = [];
 var maxRunningTasks = 32;
-
-var ref = '';
-var repo = 'https://api.github.com/repos/tc39/test262/contents/';
 
 function enqueue(task) {
   if (!paused && runningTasks.length < maxRunningTasks) {
@@ -97,6 +96,26 @@ function loadAllUnqueued(paths, then, error) {
   runAllUnqueued(paths.map(loadUnit), then, error);
 }
 
+// harness API
+
+function installAPI(global) {
+  global.$ = {
+    detachArrayBuffer: function(buffer) {
+      if (typeof postMessage !== 'function') {
+        throw new Error('No method available to detach an ArrayBuffer');
+      } else {
+        postMessage(null, '*', [buffer]);
+        /*
+          See https://html.spec.whatwg.org/multipage/comms.html#dom-window-postmessage
+          which calls https://html.spec.whatwg.org/multipage/infrastructure.html#structuredclonewithtransfer
+          which calls https://html.spec.whatwg.org/multipage/infrastructure.html#transfer-abstract-op
+          which calls the DetachArrayBuffer abstract operation https://tc39.github.io/ecma262/#sec-detacharraybuffer
+        */
+      }
+    }
+  };
+}
+
 // test runner primitives
 
 function parseFrontmatter(src) {
@@ -176,7 +195,7 @@ var asyncWait = 500; // ms
 var iframeSrc = ''; // will be set to './blank.html' if the environment does not report error details when src = ''.
 var iframes = [];
 
-function runSources(sources, isAsync, done) {
+function runSources(sources, isAsync, needsAPI, done) {
   var iframe = iframes.pop();
 
   var listener = function() {
@@ -185,6 +204,10 @@ function runSources(sources, isAsync, done) {
     var timeout;
     var w = iframe.contentWindow;
     var completed = false;
+
+    if (needsAPI) {
+      installAPI(w);
+    }
 
     w.$$testFinished = function() {
       if (completed) return;
@@ -276,15 +299,10 @@ function strict(src) {
 
 var alwaysIncludes = ['assert.js', 'sta.js'];
 function runTest262Test(src, pass, fail, skip) {
-  if (src.match(/DETACHBUFFER/)) {
-    skip('Test runner does not support detatching array buffers.');
-    return;
-  }
-
-  if (src.match(/\$\./)) {
-    skip('Test runner does not yet support the "$" API');
-    return;
-  }
+  // if (src.match(/\$\./)) {
+  //   skip('Test runner does not yet support the "$" API');
+  //   return;
+  // }
 
   var meta = parseFrontmatter(src);
   if (!meta) {
@@ -303,9 +321,12 @@ function runTest262Test(src, pass, fail, skip) {
 
   var includeSrcs = alwaysIncludes.concat(meta.includes).map(function(include) { return harness[include]; });
 
+  var needsAPI = includeSrcs.some(function(src) { return src.match(/\$\./); }) || src.match(/\$\./);
+
   if (meta.flags.async) {
     includeSrcs.push(harness['doneprintHandle.js']); // todo INTERPRETING.md says this should be donePrintHandle
   }
+
 
   // cleanup of global object. would be nice to also delete window.top, but we can't.
   if (!meta.flags.raw && src.match(/(?:^|[^A-Za-z0-9.'"\-])(name|length)/)) {
@@ -316,17 +337,17 @@ function runTest262Test(src, pass, fail, skip) {
 
   if (meta.flags.raw) {
     // Note: we cannot assert phase for these, so false positives are possible.
-    runSources(includeSrcs.concat([src]), meta.flags.async, checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
     return;
   }
 
   if (!meta.flags.strict) {
     // run in both strict and non-strict
-    runSources(includeSrcs.concat([strict(src)]), meta.flags.async, checkErr(meta.negative, function() {
-      runSources(includeSrcs.concat([src]), meta.flags.async, checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([strict(src)]), meta.flags.async, needsAPI, checkErr(meta.negative, function() {
+      runSources(includeSrcs.concat([src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
     }, fail));
   } else {
-    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), meta.flags.async, checkErr(meta.negative, pass, fail));
+    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), meta.flags.async, needsAPI, checkErr(meta.negative, pass, fail));
   }
 }
 
@@ -585,6 +606,8 @@ function loadZip(z) {
       for (var i = 0; i < harnessNames.length; ++i) {
         harness[harnessNames[i]] = harnessFiles[i];
       }
+      harness['detachArrayBuffer.js'] = 'function $DETACHBUFFER(buffer) { $.detachArrayBuffer(buffer); }'; // TODO this is a hack pending https://github.com/tc39/test262/pull/795
+
       var treeEle = document.getElementById('tree');
       treeEle.textContent = 'Tests:';
       addRunLink(treeEle);
@@ -710,11 +733,10 @@ window.addEventListener('load', function() {
   }
 
   // Check if the environment reports errors from iframes with src = ''.
-  runSources(['throw new Error;'], false, function(e) {
+  runSources(['throw new Error;'], false, false, function(e) {
     if (e.message.match(/Script error\./i)) {
       iframeSrc = 'blank.html';
     }
   });
 });
 
-// todo check environment sanity
