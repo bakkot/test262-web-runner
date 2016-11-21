@@ -23,6 +23,10 @@
 #loadStatus {
 	padding-left: 10px;
 }
+#loadFraction {
+	font-family: monospace;
+	display: inline-block;
+}
 body {
 	font-size: medium;
 }

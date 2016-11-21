@@ -644,7 +644,7 @@ window.addEventListener('load', function() {
   });
 
   document.getElementById('loadGithub').addEventListener('click', function() {
-    loadStatus.textContent = '';
+    loadStatus.style.display = 'inline-block';
     var req = new XMLHttpRequest;
 
     req.addEventListener('load', function() {
@@ -660,14 +660,15 @@ window.addEventListener('load', function() {
 
     var tick = false;
     var MB = Math.pow(2, 20)/10;
+    var loadFraction = document.getElementById('loadFraction');
     req.addEventListener('progress', function(evt) {
       if (evt.lengthComputable) {
         var loaded = '' + Math.floor(evt.loaded/MB)/10;
         var total = '' + Math.ceil(evt.total/MB)/10;
-        while (loaded.length < total.length) loaded = '\u00A0' + loaded;
-        loadStatus.textContent = 'Loading... ' + loaded + 'MB / ' + total + 'MB';
+        while (loaded.length < total.length) loaded += '\u00A0'; // nbsp
+        loadFraction.textContent = loaded + 'MB / ' + total + 'MB';
       } else {
-        loadStatus.textContent = 'Loading... ' + (tick ? '/' : '\\');
+        loadFraction.textContent = tick ? '/' : '\\';
         tick = !tick;
       }
     });
