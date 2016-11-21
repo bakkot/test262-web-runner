@@ -105,7 +105,7 @@ function installAPI(global) {
     createRealm: function() {
       var iframe = global.document.createElement('iframe');
       iframe.src = iframeSrc;
-      document.body.appendChild(iframe);
+      global.document.body.appendChild(iframe);
       return installAPI(iframe.contentWindow);
     },
     evalScript: function(src) {
