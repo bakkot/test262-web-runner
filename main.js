@@ -387,6 +387,7 @@ function addFailure(path, msg) {
   failedTests.forEach(function(o) {
     failList.appendChild(o.ele);
   });
+  document.getElementById('failuresCount').textContent = failedTests.length;
 }
 
 function makeProgressBar(count, total) {
