@@ -530,7 +530,6 @@ function addRunLink(ele) {
   var status = ele.appendChild(document.createElement('span'));
   status.className = 'wait';
   status.style.marginLeft = '5px';
-  status.style.fontFamily = 'monospace';
 
   var runLink = status.appendChild(document.createElement('input'));
   runLink.type = 'button';
@@ -541,7 +540,9 @@ function addRunLink(ele) {
     runTree(ele);
   });
 
-  status.appendChild(document.createElement('span')).style.display = 'none';
+  var progressEle = status.appendChild(document.createElement('span'));
+  progressEle.style.display = 'none';
+  progressEle.style.fontFamily = 'monospace';
 }
 
 function addSrcLink(ele, path) {
