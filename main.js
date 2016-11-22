@@ -419,7 +419,9 @@ function runSubtree(root, then, ancestors, toExpand) {
       }
       toExpand.forEach(function(ele) {
         ele.querySelector('ul').style.display = '';
-        ele.querySelector('span span').textContent = makeProgressBar(ele.doneCount, ele.totalCount);
+        var progress = ele.querySelector('span span');
+        progress.textContent = makeProgressBar(ele.doneCount, ele.totalCount);
+        progress.style.display = '';
       });
       status.textContent = 'Running...';
       status.className = 'running';
@@ -538,7 +540,7 @@ function addRunLink(ele) {
     runTree(ele);
   });
 
-  status.appendChild(document.createElement('span'));
+  status.appendChild(document.createElement('span')).style.display = 'none';
 }
 
 function addSrcLink(ele, path) {
