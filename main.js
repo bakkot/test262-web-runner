@@ -390,7 +390,7 @@ function addFailure(path, msg) {
 }
 
 function makeProgressBar(count, total) {
-  var text = count + ' / ' + total + ' [';
+  var text = count + '/' + total + ' [';
   for (var i = 0; i < 10; ++i) {
     text += i/10 < count/total ? '=' : '\u00A0';
   }
@@ -487,7 +487,7 @@ function runSubtree(root, then, ancestors, toExpand) {
           if (wasHidden) {
             ul.style.display = 'none';
           }
-          status.textContent = '' + passCount + ' / ' + (passCount + failCount) + (skipCount > 0 ? ' (skipped ' + skipCount + ')' : '')
+          status.textContent = passCount + '/' + (passCount + failCount) + (skipCount > 0 ? ' (skipped ' + skipCount + ')' : '')
           status.className = failCount === 0 ? 'pass' : 'fail';
           root.passes = passCount;
           root.fails = failCount;
