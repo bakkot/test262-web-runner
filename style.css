@@ -15,6 +15,9 @@
 	color: red;
 }
 .fail-message {}
+.run {
+	margin-right: 5px;
+}
 #controls {
   position: fixed;
   top: 30px;

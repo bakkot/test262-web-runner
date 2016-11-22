@@ -389,8 +389,23 @@ function addFailure(path, msg) {
   });
 }
 
-var activeSubtrees = [];
-function runSubtree(root, then, toExpand) {
+function makeProgressBar(count, total) {
+  var text = count + ' / ' + total + ' [';
+  for (var i = 0; i < 10; ++i) {
+    text += i/10 < count/total ? '=' : '\u00A0';
+  }
+  text += ']';
+  return text;
+}
+
+function increment(ancestors) {
+  ancestors.forEach(function(ele) {
+    ++ele.doneCount;
+    ele.querySelector('span span').textContent = makeProgressBar(ele.doneCount, ele.totalCount);
+  });
+}
+
+function runSubtree(root, then, ancestors, toExpand) {
   if (root.passes) {
     then(root.passes, root.fails, root.skips);
     return;
@@ -403,11 +418,8 @@ function runSubtree(root, then, toExpand) {
         return;
       }
       toExpand.forEach(function(ele) {
-        activeSubtrees.push(ele);
         ele.querySelector('ul').style.display = '';
-        var status = ele.querySelector('span');
-        status.textContent = 'Working...';
-        status.className = 'wait';
+        ele.querySelector('span span').textContent = makeProgressBar(ele.doneCount, ele.totalCount);
       });
       status.textContent = 'Running...';
       status.className = 'running';
@@ -417,6 +429,7 @@ function runSubtree(root, then, toExpand) {
         root.passes = 1;
         root.fails = 0;
         root.skips = 0;
+        increment(ancestors);
         then(1, 0, 0);
         complete(task);
       }, function(msg) {
@@ -426,6 +439,7 @@ function runSubtree(root, then, toExpand) {
         root.passes = 0;
         root.fails = 1;
         root.skips = 0;
+        increment(ancestors);
         then(0, 1, 0);
         complete(task);
       }, function(msg) {
@@ -434,6 +448,7 @@ function runSubtree(root, then, toExpand) {
         root.passes = 0;
         root.fails = 0;
         root.skips = 1;
+        increment(ancestors);
         then(0, 0, 1);
         complete(task);
       });
@@ -459,6 +474,7 @@ function runSubtree(root, then, toExpand) {
     var passCount = 0;
     var failCount = 0;
     var skipCount = 0;
+    var seenNovel = false;
     for (var i = 0; i < len; ++i) {
       runSubtree(children[i], function(passes, fails, skips) {
         ++doneCount;
@@ -469,10 +485,6 @@ function runSubtree(root, then, toExpand) {
           if (wasHidden) {
             ul.style.display = 'none';
           }
-          var myIndex = activeSubtrees.indexOf(root);
-          if (myIndex !== -1) {
-            activeSubtrees.splice(myIndex, 1);
-          }
           status.textContent = '' + passCount + ' / ' + (passCount + failCount) + (skipCount > 0 ? ' (skipped ' + skipCount + ')' : '')
           status.className = failCount === 0 ? 'pass' : 'fail';
           root.passes = passCount;
@@ -480,7 +492,8 @@ function runSubtree(root, then, toExpand) {
           root.skips = skipCount;
           then(passCount, failCount, skipCount);
         }
-      }, i === 0 ? toExpand.concat([root]) : []);
+      }, ancestors.concat([root]), !seenNovel && children[i].passes === undefined ? toExpand.concat([root]) : []);
+      seenNovel = children[i].passes === undefined;
     }
   }
 }
@@ -494,6 +507,11 @@ function runTree(root) {
     runs[i].style.display = 'none';
   }
 
+  var ancestors = [];
+  for (var current = root; current.id !== 'tree'; current = current.parentNode.parentNode) {
+    ancestors.unshift(current.parentNode.parentNode);
+  }
+
   var start = Date.now();
   runSubtree(root, function(){
     console.log((Date.now() - start)/1000 + ' seconds');
@@ -502,12 +520,14 @@ function runTree(root) {
     for (var i = 0; i < runs.length; ++i) {
       runs[i].style.display = '';
     }
-  }, []);
+  }, ancestors, []);
 }
 
 function addRunLink(ele) {
   var status = ele.appendChild(document.createElement('span'));
+  status.className = 'wait';
   status.style.marginLeft = '5px';
+  status.style.fontFamily = 'monospace';
 
   var runLink = status.appendChild(document.createElement('input'));
   runLink.type = 'button';
@@ -517,6 +537,8 @@ function addRunLink(ele) {
     e.stopPropagation();
     runTree(ele);
   });
+
+  status.appendChild(document.createElement('span'));
 }
 
 function addSrcLink(ele, path) {
@@ -548,6 +570,8 @@ function renderTree(tree, container, path, hide) {
       addRunLink(li);
       li.path = path.concat([item.name]);
     } else {
+      li.totalCount = item.count;
+      li.doneCount = 0;
       addRunLink(li);
       renderTree(item.files, li, path.concat([item.name]), true);
       li.addEventListener('click', function(e) {
@@ -571,20 +595,24 @@ function getStructure(zip, predicate) {
   structure.type = 'dir';
   structure.name = '.';
   structure.files = Object.create(null);
+  structure.count = 0;
   zip.forEach(function(path, file) {
     if (!predicate(path)) return;
     path = path.split('/');
     if (path[path.length - 1] === '') return; // i.e. this is a directory
     var dir = structure;
     for (var i = 0; i < path.length - 1; ++i) {
+      ++dir.count;
       if (!Object.prototype.hasOwnProperty.call(dir.files, path[i])) {
-        dir.files[path[i]] = Object.create(null);
-        dir.files[path[i]].type = 'dir';
-        dir.files[path[i]].name = path[i];
-        dir.files[path[i]].files = Object.create(null);
+        var f = dir.files[path[i]] = Object.create(null);
+        f.type = 'dir';
+        f.name = path[i];
+        f.files = Object.create(null);
+        f.count = 0;
       }
       dir = dir.files[path[i]];
     }
+    ++dir.count;
     var obj = Object.create(null);
     obj.type = 'file';
     obj.name = path[path.length - 1];
@@ -613,6 +641,8 @@ function loadZip(z) {
 
       var treeEle = document.getElementById('tree');
       treeEle.textContent = 'Tests:';
+      treeEle.doneCount = 0;
+      treeEle.totalCount = tree.files.test.count;
       addRunLink(treeEle);
       renderTree(tree.files.test.files, treeEle, ['test'], false);
     });
@@ -705,22 +735,6 @@ window.addEventListener('load', function() {
     document.getElementById('controls').style.display = 'none';
     pauseButton.value = 'Pause';
     pauseButton.className = 'btn btn-primary btn-lg';
-
-    for (var i = 0; i < activeSubtrees.length; ++i) {
-      var ele = activeSubtrees[i];
-      var status = ele.querySelector('span');
-      status.textContent = '';
-      status.className = '';
-      var runLink = status.appendChild(document.createElement('input'));
-      runLink.type = 'button';
-      runLink.value = 'Run';
-      runLink.className = 'btn btn-default btn-xs run';
-      runLink.addEventListener('click', (function(ele){return function(e) {
-        e.stopPropagation();
-        runTree(ele);
-      }})(ele));
-    }
-    activeSubtrees = [];
 
     var runs = document.querySelectorAll('.run');
     for (var i = 0; i < runs.length; ++i) {
