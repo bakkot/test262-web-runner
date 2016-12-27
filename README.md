@@ -6,4 +6,4 @@ Prior to this, it hadn't been possible to run an up-to-date version of test262 i
 
 You can either provide a local .zip of the repo (with or without .git/), or click 'Remote' to load the one hosted in this repository.
 
-The hosted copy was last updated on 22 November, 2016.
+The hosted copy was last updated on 27 December, 2016.
