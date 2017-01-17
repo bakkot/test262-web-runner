@@ -1,7 +1,7 @@
 "use strict";
 
 // var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
-var zipballUrl = 'tc39-test262-4ff7e43.zip';
+var zipballUrl = 'tc39-test262-c2eacd9.zip';
 
 
 // queue/fetch primitives
