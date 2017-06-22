@@ -215,7 +215,16 @@ var asyncWait = 500; // ms
 var iframeSrc = ''; // will be set to './blank.html' if the environment does not report error details when src = ''.
 var iframes = [];
 
-function runSources(sources, isAsync, needsAPI, done) {
+/*
+arg looks like this:
+{
+  sources: Array<String>,
+  isAsync: boolean,
+  needsAPI: boolean,
+}
+
+*/
+function runSources(arg, done) {
   var iframe = iframes.pop();
 
   var listener = function() {
@@ -225,7 +234,7 @@ function runSources(sources, isAsync, needsAPI, done) {
     var w = iframe.contentWindow;
     var completed = false;
 
-    if (needsAPI) {
+    if (arg.needsAPI) {
       installAPI(w);
     }
 
@@ -240,7 +249,7 @@ function runSources(sources, isAsync, needsAPI, done) {
       err = e;
       w.$$testFinished();
     });
-    if (isAsync) {
+    if (arg.isAsync) {
       w.print = function(msg) {
         if (err === errSigil && msg !== 'Test262:AsyncTestComplete') {
           err = new w.Error('Error: unexpected message ' + msg);
@@ -254,9 +263,9 @@ function runSources(sources, isAsync, needsAPI, done) {
       w.document.body.appendChild(script);
     }
 
-    sources.forEach(append);
+    arg.sources.forEach(append);
 
-    if (!isAsync) {
+    if (!arg.isAsync) {
       append('$$testFinished();');
     }
     if (!completed) {
@@ -352,16 +361,16 @@ function runTest262Test(src, pass, fail, skip) {
 
   if (meta.flags.raw) {
     // Note: we cannot assert phase for these, so false positives are possible.
-    runSources(includeSrcs.concat([src]), isAsync, needsAPI, checkErr(meta.negative, pass, fail));
+    runSources({ sources: includeSrcs.concat([src]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
     return;
   }
   if (!meta.flags.strict) {
     // run in both strict and non-strict
-    runSources(includeSrcs.concat([strict(src)]), isAsync, needsAPI, checkErr(meta.negative, function() {
-      runSources(includeSrcs.concat([src]), isAsync, needsAPI, checkErr(meta.negative, pass, fail));
+    runSources({sources: includeSrcs.concat([strict(src)]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, function() {
+      runSources({sources: includeSrcs.concat([src]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
     }, fail));
   } else {
-    runSources(includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), isAsync, needsAPI, checkErr(meta.negative, pass, fail));
+    runSources({sources: includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
   }
 }
 
@@ -769,7 +778,7 @@ window.addEventListener('load', function() {
   }
 
   // Check if the environment reports errors from iframes with src = ''.
-  runSources(['throw new Error;'], false, false, function(e) {
+  runSources({ sources: ['throw new Error;'], isAsync: false, needsAPI: false }, function(e) {
     if (e.message.match(/Script error\./i)) {
       iframeSrc = 'blank.html';
     }
