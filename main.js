@@ -3,6 +3,8 @@
 // var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
 var zipballUrl = 'tc39-test262-be0964c.zip';
 
+var skippedRegex = /integer-limit/; // todo this should not be here, and should probably be exposed
+
 
 // queue/fetch primitives
 
@@ -104,7 +106,7 @@ function loadAllUnqueued(paths, then, error) {
 // API
 
 function installAPI(global) {
-  return global.$ = {
+  return global.$262 = {
     createRealm: function() {
       var iframe = global.document.createElement('iframe');
       iframe.src = iframeSrc;
@@ -329,11 +331,11 @@ function runTest262Test(src, pass, fail, skip) {
   }
 
   var includeSrcs = alwaysIncludes.concat(meta.includes).map(function(include) { return harness[include]; });
-  var needsAPI = includeSrcs.some(function(src) { return src.match(/\$\./); }) || src.match(/\$\./);
+  var needsAPI = includeSrcs.some(function(src) { return src.match(/\$262\./); }) || src.match(/\$262\./);
 
-  var isAsync = meta.flags.async || src.match(/\$DONE/) // todo the latter is a hack pending https://github.com/tc39/test262/pull/798
+  var isAsync = meta.flags.async;
   if (isAsync) {
-    includeSrcs.push(harness['doneprintHandle.js']); // todo INTERPRETING.md says this should be donePrintHandle cf https://github.com/tc39/test262/issues/791
+    includeSrcs.push(harness['doneprintHandle.js']);
   }
 
   // cleanup of global object. would be nice to also delete window.top, but we can't.
@@ -342,6 +344,11 @@ function runTest262Test(src, pass, fail, skip) {
   }
 
   includeSrcs = [includeSrcs.join(';\n')];
+
+  if ((includeSrcs + src).match(/\$262\.agent/)) {
+    skip('Test runner does not yet support the agent API.'); // and won't until https://github.com/tc39/test262/issues/928 probably
+    return;
+  }
 
   if (meta.flags.raw) {
     // Note: we cannot assert phase for these, so false positives are possible.
@@ -416,6 +423,15 @@ function runSubtree(root, then, ancestors, toExpand) {
   }
   var status = root.querySelector('span');
   if (root.path) { // i.e. is a file
+    if (skippedRegex.test(root.path[root.path.length - 1])) {
+      status.textContent = 'Skipped by runner.';
+      status.className = 'skip';
+      root.passes = 0;
+      root.fails = 0;
+      root.skips = 1;
+      then(0, 0, 1);
+      return;
+    }
     load(root.path, function(task, data) {
       if (task.cancelled) {
         complete(task);
@@ -644,7 +660,6 @@ function loadZip(z) {
       for (var i = 0; i < harnessNames.length; ++i) {
         harness[harnessNames[i]] = harnessFiles[i];
       }
-      harness['detachArrayBuffer.js'] = 'function $DETACHBUFFER(buffer) { $.detachArrayBuffer(buffer); }'; // TODO this is a hack pending https://github.com/tc39/test262/pull/795
 
       var treeEle = document.getElementById('tree');
       treeEle.textContent = 'Tests:';
