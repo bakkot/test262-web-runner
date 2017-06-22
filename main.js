@@ -694,8 +694,12 @@ window.addEventListener('load', function() {
   var buttons = document.getElementById('buttons');
   var loadStatus = document.getElementById('loadStatus');
 
+  fileEle.value = ''; // so that the change event is still fired after reloads
+
   fileEle.addEventListener('change', function() {
-    if (!fileEle.files[0]) return;
+    if (!fileEle.files[0]) {
+      return;
+    }
     loadStatus.style.display = 'inline-block';
     loadStatus.textContent = 'Reading...';
     loadZip(fileEle.files[0])
