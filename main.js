@@ -218,7 +218,9 @@ var iframes = [];
 /*
 arg looks like this:
 {
-  sources: Array<String>,
+  setup: string,
+  source: string,
+  isModule: boolean,
   isAsync: boolean,
   needsAPI: boolean,
 }
@@ -257,16 +259,20 @@ function runSources(arg, done) {
         w.$$testFinished();
       }
     }
-    function append(src) {
+    function append(src, asModule) {
       var script = w.document.createElement('script');
       script.text = src;
+      if (asModule) {
+        script.type = "module";
+      }
       w.document.body.appendChild(script);
     }
 
-    arg.sources.forEach(append);
+    append(arg.setup, false);
+    append(arg.source, arg.isModule);
 
     if (!arg.isAsync) {
-      append('$$testFinished();');
+      append('$$testFinished();', arg.isModule); // same isModule-ness because modules are loaded async. 
     }
     if (!completed) {
       timeout = setTimeout(function() {
@@ -330,11 +336,6 @@ function runTest262Test(src, pass, fail, skip) {
     return;
   }
 
-  if (meta.flags.module) {
-    skip('Test runner does not yet support modules.');
-    return;
-  }
-
   if (meta.negative && meta.negative.phase === 'early' && !meta.flags.raw) {
     src = 'throw new Error("NotEarlyError");\n' + src;
   }
@@ -352,26 +353,31 @@ function runTest262Test(src, pass, fail, skip) {
     includeSrcs.push('delete window.name;\ndelete window.length;');
   }
 
-  includeSrcs = [includeSrcs.join(';\n')];
+  var setup = includeSrcs.join(';\n');
 
   if ((includeSrcs + src).match(/\$262\.agent/)) {
     skip('Test runner does not yet support the agent API.'); // and won't until https://github.com/tc39/test262/issues/928 probably
     return;
   }
 
-  if (meta.flags.raw) {
-    // Note: we cannot assert phase for these, so false positives are possible.
-    runSources({ sources: includeSrcs.concat([src]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+  if (meta.flags.module) {
+    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
     return;
   }
-  if (!meta.flags.strict) {
-    // run in both strict and non-strict
-    runSources({sources: includeSrcs.concat([strict(src)]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, function() {
-      runSources({sources: includeSrcs.concat([src]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
-    }, fail));
-  } else {
-    runSources({sources: includeSrcs.concat([meta.flags.strict === 'always' ? strict(src) : src]), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+  if (meta.flags.raw) {
+    // Note: we cannot assert phase for these, so false positives are possible.
+    runSources({ setup: setup, source: src, isModule: false, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+    return;
   }
+  if (meta.flags.strict) {
+    runSources({ setup: setup, source: meta.flags.strict === 'always' ? strict(src) : src, isModule: false, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+    return;
+  }
+
+  // run in both strict and non-strict
+  runSources({ setup: setup, source: strict(src), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, function() {
+    runSources({ setup: setup, source: src, isModule: false, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+  }, fail));
 }
 
 
@@ -778,7 +784,7 @@ window.addEventListener('load', function() {
   }
 
   // Check if the environment reports errors from iframes with src = ''.
-  runSources({ sources: ['throw new Error;'], isAsync: false, needsAPI: false }, function(e) {
+  runSources({ setup: '', source: 'throw new Error;', isModule: false, isAsync: false, needsAPI: false }, function(e) {
     if (e.message.match(/Script error\./i)) {
       iframeSrc = 'blank.html';
     }
