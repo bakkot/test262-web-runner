@@ -609,7 +609,7 @@ function renderTree(tree, container, path, hide) {
   var list = container.appendChild(document.createElement('ul'));
   Object.keys(tree)
     .sort()
-    .filter(function(key) { return !key.match(/(_FIXTURE\.js$)/) })
+    .filter(function(key) { return !key.match(/(_FIXTURE\.js$)/); })
     .forEach(function(key) {
       var item = tree[key];
 
@@ -663,7 +663,9 @@ function getStructure(zip, predicate) {
       }
       dir = dir.files[path[i]];
     }
-    ++dir.count;
+    if (!path[path.length - 1].match(/(_FIXTURE\.js$)/)) {
+      ++dir.count;
+    }
     var obj = Object.create(null);
     obj.type = 'file';
     obj.name = path[path.length - 1];
