@@ -11,7 +11,7 @@ var skippedRegex = /integer-limit/; // todo this should not be here, and should 
 var paused = false;
 var runningTasks = [];
 var backlogTasks = [];
-var maxRunningTasks = 32;
+var maxRunningTasks = 4;
 
 function enqueue(task) {
   if (!paused && runningTasks.length < maxRunningTasks) {
@@ -223,6 +223,7 @@ arg looks like this:
   isModule: boolean,
   isAsync: boolean,
   needsAPI: boolean,
+  path: string, // only present for modules
 }
 
 */
@@ -259,20 +260,29 @@ function runSources(arg, done) {
         w.$$testFinished();
       }
     }
-    function append(src, asModule) {
-      var script = w.document.createElement('script');
-      script.text = src;
-      if (asModule) {
-        script.type = "module";
-      }
-      w.document.body.appendChild(script);
+
+    var script = w.document.createElement('script');
+    script.text = arg.setup;
+    w.document.body.appendChild(script);
+
+
+    if (arg.isModule) {
+      w.navigator.serviceWorker.addEventListener('message', messageListener);
     }
 
-    append(arg.setup, false);
-    append(arg.source, arg.isModule);
+    script = w.document.createElement('script');
+    if (arg.isModule) {
+      script.src = arg.path;
+      script.type = 'module';
+    } else {
+      script.text = arg.source;
+    }
+    w.document.body.appendChild(script);
 
-    if (!arg.isAsync) {
-      append('$$testFinished();', arg.isModule); // same isModule-ness because modules are loaded async. 
+    if (!arg.isAsync && !arg.isModule) { // For modules, our service worker appends this to the source; it would be better to do it this way in that case also, but there's some evaluation order issues.
+      script = w.document.createElement('script');
+      script.text = '$$testFinished();';
+      w.document.body.appendChild(script);
     }
     if (!completed) {
       timeout = setTimeout(function() {
@@ -285,7 +295,7 @@ function runSources(arg, done) {
 
   iframe.addEventListener('load', listener);
 
-  iframe.src = iframeSrc;
+  iframe.src = arg.isModule ? 'blank.html' : iframeSrc; // Our service worker can't intercept requests when src = '', sadly.
 }
 
 function checkErrorType(errorEvent, global, kind) {
@@ -329,7 +339,7 @@ function strict(src) {
 }
 
 var alwaysIncludes = ['assert.js', 'sta.js'];
-function runTest262Test(src, pass, fail, skip) {
+function runTest262Test(src, path, pass, fail, skip) {
   var meta = parseFrontmatter(src);
   if (!meta) {
     skip('Test runner couldn\'t parse frontmatter');
@@ -361,7 +371,7 @@ function runTest262Test(src, pass, fail, skip) {
   }
 
   if (meta.flags.module) {
-    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI, path: path.join('/') }, checkErr(meta.negative, pass, fail));
     return;
   }
   if (meta.flags.raw) {
@@ -460,7 +470,7 @@ function runSubtree(root, then, ancestors, toExpand) {
       });
       status.textContent = 'Running...';
       status.className = 'running';
-      runTest262Test(data, function() {
+      runTest262Test(data, root.path, function() {
         status.textContent = 'Pass!';
         status.className = 'pass';
         root.passes = 1;
@@ -597,34 +607,37 @@ function addSrcLink(ele, path) {
 
 function renderTree(tree, container, path, hide) {
   var list = container.appendChild(document.createElement('ul'));
-  Object.keys(tree).sort().forEach(function(key) {
-    var item = tree[key];
+  Object.keys(tree)
+    .sort()
+    .filter(function(key) { return !key.match(/(_FIXTURE\.js$)/) })
+    .forEach(function(key) {
+      var item = tree[key];
 
-    var li = document.createElement('li');
-    li.textContent = (item.type === 'dir' ? '[+] ' : '') + item.name;
+      var li = document.createElement('li');
+      li.textContent = (item.type === 'dir' ? '[+] ' : '') + item.name;
 
-    if (item.type === 'file') {
-      addSrcLink(li, path.concat([item.name]));
-      addRunLink(li);
-      li.path = path.concat([item.name]);
-    } else {
-      li.totalCount = item.count;
-      li.doneCount = 0;
-      addRunLink(li);
-      renderTree(item.files, li, path.concat([item.name]), true);
-      li.addEventListener('click', function(e) {
-        if (e.target !== li) return;
-        e.stopPropagation();
-        var subtree = li.querySelector('ul');
-        if (subtree.style.display === 'none') {
-          subtree.style.display = '';
-        } else {
-          subtree.style.display = 'none';
-        }
-      });
-    }
-    list.appendChild(li);
-  });
+      if (item.type === 'file') {
+        addSrcLink(li, path.concat([item.name]));
+        addRunLink(li);
+        li.path = path.concat([item.name]);
+      } else {
+        li.totalCount = item.count;
+        li.doneCount = 0;
+        addRunLink(li);
+        renderTree(item.files, li, path.concat([item.name]), true);
+        li.addEventListener('click', function(e) {
+          if (e.target !== li) return;
+          e.stopPropagation();
+          var subtree = li.querySelector('ul');
+          if (subtree.style.display === 'none') {
+            subtree.style.display = '';
+          } else {
+            subtree.style.display = 'none';
+          }
+        });
+      }
+      list.appendChild(li);
+    });
   if (hide) list.style.display = 'none';
 }
 
@@ -664,7 +677,7 @@ var tree; // global variables are fun!
 var harness = {};
 function loadZip(z) {
   return JSZip.loadAsync(z).then(function(z) {
-    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/(^\.)|(_FIXTURE\.js$)/) && !path.match(/^__MACOSX/); });
+    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/^(\.|__MACOSX)/); });
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
@@ -686,6 +699,31 @@ function loadZip(z) {
   });
 }
 
+
+// coordination with service worker
+
+function messageListener(e) {
+  var port = e.ports[0];
+  var path = e.data.split('/');
+  path = path.slice(path.lastIndexOf('test') + 1);
+  var head = tree.files.test;
+  for (var i = 0; i < path.length; ++i) {
+    if (typeof head !== 'object' || head.type !== 'dir') {
+      e.ports[0].postMessage({ success: false });
+      return;
+    }
+    head = head.files[path[i]];
+  }
+  if (typeof head !== 'object' || head.type !== 'file') {
+    port.postMessage({ success: false });
+    return;
+  }
+  head.file.async('string').then(function(c) {
+    port.postMessage({ success: true, data: c });
+  }, function(e) {
+    port.postMessage({ success: false });
+  });
+}
 
 // onload
 
@@ -793,4 +831,13 @@ window.addEventListener('load', function() {
       iframeSrc = 'blank.html';
     }
   });
+
+
+  // Register a service worker to handle module requests
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/worker.js').catch(function(err) {
+      console.log('ServiceWorker registration failed: ', err);
+    });
+  }
+
 });
