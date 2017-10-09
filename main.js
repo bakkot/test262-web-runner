@@ -1,7 +1,7 @@
 "use strict";
 
 // var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
-var zipballUrl = 'tc39-test262-8fe11a6.zip';
+var zipballUrl = 'tc39-test262-1afb7c7.zip';
 
 var skippedRegex = /integer-limit/; // todo this should not be here, and should probably be exposed
 
