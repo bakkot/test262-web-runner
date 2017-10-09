@@ -11,7 +11,7 @@ var skippedRegex = /integer-limit/; // todo this should not be here, and should 
 var paused = false;
 var runningTasks = [];
 var backlogTasks = [];
-var maxRunningTasks = 32;
+var maxRunningTasks = 4;
 
 function enqueue(task) {
   if (!paused && runningTasks.length < maxRunningTasks) {
@@ -635,34 +635,37 @@ function addSrcLink(ele, path) {
 
 function renderTree(tree, container, path, hide) {
   var list = container.appendChild(document.createElement('ul'));
-  Object.keys(tree).sort().forEach(function(key) {
-    var item = tree[key];
+  Object.keys(tree)
+    .sort()
+    .filter(function(key) { return !key.match(/(_FIXTURE\.js$)/) })
+    .forEach(function(key) {
+      var item = tree[key];
 
-    var li = document.createElement('li');
-    li.textContent = (item.type === 'dir' ? '[+] ' : '') + item.name;
+      var li = document.createElement('li');
+      li.textContent = (item.type === 'dir' ? '[+] ' : '') + item.name;
 
-    if (item.type === 'file') {
-      addSrcLink(li, path.concat([item.name]));
-      addRunLink(li);
-      li.path = path.concat([item.name]);
-    } else {
-      li.totalCount = item.count;
-      li.doneCount = 0;
-      addRunLink(li);
-      renderTree(item.files, li, path.concat([item.name]), true);
-      li.addEventListener('click', function(e) {
-        if (e.target !== li) return;
-        e.stopPropagation();
-        var subtree = li.querySelector('ul');
-        if (subtree.style.display === 'none') {
-          subtree.style.display = '';
-        } else {
-          subtree.style.display = 'none';
-        }
-      });
-    }
-    list.appendChild(li);
-  });
+      if (item.type === 'file') {
+        addSrcLink(li, path.concat([item.name]));
+        addRunLink(li);
+        li.path = path.concat([item.name]);
+      } else {
+        li.totalCount = item.count;
+        li.doneCount = 0;
+        addRunLink(li);
+        renderTree(item.files, li, path.concat([item.name]), true);
+        li.addEventListener('click', function(e) {
+          if (e.target !== li) return;
+          e.stopPropagation();
+          var subtree = li.querySelector('ul');
+          if (subtree.style.display === 'none') {
+            subtree.style.display = '';
+          } else {
+            subtree.style.display = 'none';
+          }
+        });
+      }
+      list.appendChild(li);
+    });
   if (hide) list.style.display = 'none';
 }
 
@@ -702,7 +705,7 @@ var tree; // global variables are fun!
 var harness = {};
 function loadZip(z) {
   return JSZip.loadAsync(z).then(function(z) {
-    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/(^\.)|(_FIXTURE\.js$)/) && !path.match(/^__MACOSX/); });
+    tree = getStructure(z, function(path) { return path.match(/\.js$/) && !path.match(/^(\.|__MACOSX)/); });
     var keys = Object.keys(tree.files);
     if (keys.length === 1) tree = tree.files[keys[0]];
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {

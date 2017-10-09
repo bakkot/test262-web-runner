@@ -1,25 +1,27 @@
 self.addEventListener('fetch', function(event) {
-  // console.log(event);
-  if (/blank.html/.test(event.request.referrer)) {
+  // TODO also intercept blank.html to serve the right thing without hitting the network
+  const isInitial = /blank.html$/.test(event.request.referrer);
+  const isSubsequent = /\/test\/.*\.js$/.test(event.request.referrer);
+  if (isInitial || isSubsequent) {
     event.respondWith(async function() {
       const client = await clients.get(event.clientId);
       const chan = new MessageChannel();
-      // console.log(client);
 
       let resolve, reject;
       const rv = new Promise((res, rej) => {
         resolve = res; reject = rej;
       });
-      setTimeout(() => reject(), 2000);
+      setTimeout(() => reject('timed out'), 2000);
       
       chan.port1.onmessage = ( e => {
-        // console.log('messaged!');
-        // console.log(e);
         if (!e.data.success) {
-          reject();
+          reject('not found');
           return;
         }
-        const text = e.data.data + '\n;$$testFinished();'; // This is such a hack...
+        let text = e.data.data;
+        if (isInitial) {
+          text += '\n;$$testFinished();'; // This is such a hack...
+        }
         resolve(new Response(text, {
           headers: {
             'Content-Type': 'application/javascript',
