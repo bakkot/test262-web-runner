@@ -223,6 +223,7 @@ arg looks like this:
   isModule: boolean,
   isAsync: boolean,
   needsAPI: boolean,
+  path: string, // only present for modules
 }
 
 */
@@ -259,21 +260,58 @@ function runSources(arg, done) {
         w.$$testFinished();
       }
     }
-    function append(src, asModule) {
-      var script = w.document.createElement('script');
-      script.text = src;
-      if (asModule) {
-        script.type = "module";
-      }
+
+    var script = w.document.createElement('script');
+    script.text = arg.setup;
+    w.document.body.appendChild(script);
+
+
+    if (arg.isModule) {
+      // TODO move this listener elsewhere; its implementation is too tightly coupled with the .zip loader to live here
+      w.navigator.serviceWorker.addEventListener('message', function(e) {
+        var port = e.ports[0];
+        var path = e.data.split('/');
+        path = path.slice(path.lastIndexOf('test') + 1);
+        var head = tree.files.test;
+        for (var i = 0; i < path.length; ++i) {
+          if (typeof head !== 'object' || head.type !== 'dir') {
+            e.ports[0].postMessage({ success: false });
+            return;
+          }
+          head = head.files[path[i]];
+        }
+        if (typeof head !== 'object' || head.type !== 'file') {
+          port.postMessage({ success: false });
+          return;
+        }
+        head.file.async('string').then(function(c) {
+          port.postMessage({ success: true, data: c });
+        }, function(e) {
+          port.postMessage({ success: false });
+        });
+      });
+    }
+
+    script = w.document.createElement('script');
+    if (arg.isModule) {
+      script.src = arg.path.join('/');
+      script.type = 'module';
+    } else {
+      script.text = arg.source;
+    }
+    w.document.body.appendChild(script);
+
+    if (!arg.isAsync && !arg.isModule) {
+      script = w.document.createElement('script');
+      script.text = '$$testFinished();';
       w.document.body.appendChild(script);
     }
-
-    append(arg.setup, false);
-    append(arg.source, arg.isModule);
-
-    if (!arg.isAsync) {
-      append('$$testFinished();', arg.isModule); // same isModule-ness because modules are loaded async. 
-    }
+    // if (arg.isModule) {
+    //   script = w.document.createElement('script');
+    //   script.text = 'setTimeout(function(){$$testFinished();},' + Math.ceil(asyncWait / 2) + ')';
+    //   script.type = 'module'; // same isModule-ness because modules are loaded async.
+    //   w.document.body.appendChild(script);
+    // }
     if (!completed) {
       timeout = setTimeout(function() {
         if (completed) return;
@@ -285,7 +323,7 @@ function runSources(arg, done) {
 
   iframe.addEventListener('load', listener);
 
-  iframe.src = iframeSrc;
+  iframe.src = arg.isModule ? 'blank.html' : iframeSrc; // Our service worker can't intercept requests from a blank page, unfortunately; also we need its path to be knowable to the worker.
 }
 
 function checkErrorType(errorEvent, global, kind) {
@@ -329,7 +367,7 @@ function strict(src) {
 }
 
 var alwaysIncludes = ['assert.js', 'sta.js'];
-function runTest262Test(src, pass, fail, skip) {
+function runTest262Test(src, path, pass, fail, skip) {
   var meta = parseFrontmatter(src);
   if (!meta) {
     skip('Test runner couldn\'t parse frontmatter');
@@ -361,7 +399,7 @@ function runTest262Test(src, pass, fail, skip) {
   }
 
   if (meta.flags.module) {
-    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI, path: path }, checkErr(meta.negative, pass, fail));
     return;
   }
   if (meta.flags.raw) {
@@ -460,7 +498,7 @@ function runSubtree(root, then, ancestors, toExpand) {
       });
       status.textContent = 'Running...';
       status.className = 'running';
-      runTest262Test(data, function() {
+      runTest262Test(data, root.path, function() {
         status.textContent = 'Pass!';
         status.className = 'pass';
         root.passes = 1;
@@ -793,4 +831,17 @@ window.addEventListener('load', function() {
       iframeSrc = 'blank.html';
     }
   });
+
+
+  // Register a service worker to handle module requests 
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/worker.js').then(function(registration) {
+      // Registration was successful
+      console.log('ServiceWorker registration successful with scope: ', registration.scope);
+    }, function(err) {
+      // registration failed :(
+      console.log('ServiceWorker registration failed: ', err);
+    });
+  }
+
 });
