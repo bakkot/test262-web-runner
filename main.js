@@ -837,7 +837,7 @@ window.addEventListener('load', function() {
 
   // Register a service worker to handle module requests
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/worker.js').catch(function(err) {
+    navigator.serviceWorker.register('./worker.js').catch(function(err) {
       console.log('ServiceWorker registration failed: ', err);
     });
   }
