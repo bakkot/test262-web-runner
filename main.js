@@ -267,51 +267,23 @@ function runSources(arg, done) {
 
 
     if (arg.isModule) {
-      // TODO move this listener elsewhere; its implementation is too tightly coupled with the .zip loader to live here
-      w.navigator.serviceWorker.addEventListener('message', function(e) {
-        var port = e.ports[0];
-        var path = e.data.split('/');
-        path = path.slice(path.lastIndexOf('test') + 1);
-        var head = tree.files.test;
-        for (var i = 0; i < path.length; ++i) {
-          if (typeof head !== 'object' || head.type !== 'dir') {
-            e.ports[0].postMessage({ success: false });
-            return;
-          }
-          head = head.files[path[i]];
-        }
-        if (typeof head !== 'object' || head.type !== 'file') {
-          port.postMessage({ success: false });
-          return;
-        }
-        head.file.async('string').then(function(c) {
-          port.postMessage({ success: true, data: c });
-        }, function(e) {
-          port.postMessage({ success: false });
-        });
-      });
+      w.navigator.serviceWorker.addEventListener('message', messageListener);
     }
 
     script = w.document.createElement('script');
     if (arg.isModule) {
-      script.src = arg.path.join('/');
+      script.src = arg.path;
       script.type = 'module';
     } else {
       script.text = arg.source;
     }
     w.document.body.appendChild(script);
 
-    if (!arg.isAsync && !arg.isModule) {
+    if (!arg.isAsync && !arg.isModule) { // For modules, our service worker appends this to the source; it would be better to do it this way in that case also, but there's some evaluation order issues.
       script = w.document.createElement('script');
       script.text = '$$testFinished();';
       w.document.body.appendChild(script);
     }
-    // if (arg.isModule) {
-    //   script = w.document.createElement('script');
-    //   script.text = 'setTimeout(function(){$$testFinished();},' + Math.ceil(asyncWait / 2) + ')';
-    //   script.type = 'module'; // same isModule-ness because modules are loaded async.
-    //   w.document.body.appendChild(script);
-    // }
     if (!completed) {
       timeout = setTimeout(function() {
         if (completed) return;
@@ -323,7 +295,7 @@ function runSources(arg, done) {
 
   iframe.addEventListener('load', listener);
 
-  iframe.src = arg.isModule ? 'blank.html' : iframeSrc; // Our service worker can't intercept requests from a blank page, unfortunately; also we need its path to be knowable to the worker.
+  iframe.src = arg.isModule ? 'blank.html' : iframeSrc; // Our service worker can't intercept requests when src = '', sadly.
 }
 
 function checkErrorType(errorEvent, global, kind) {
@@ -399,7 +371,7 @@ function runTest262Test(src, path, pass, fail, skip) {
   }
 
   if (meta.flags.module) {
-    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI, path: path }, checkErr(meta.negative, pass, fail));
+    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI, path: path.join('/') }, checkErr(meta.negative, pass, fail));
     return;
   }
   if (meta.flags.raw) {
@@ -728,6 +700,31 @@ function loadZip(z) {
 }
 
 
+// coordination with service worker
+
+function messageListener(e) {
+  var port = e.ports[0];
+  var path = e.data.split('/');
+  path = path.slice(path.lastIndexOf('test') + 1);
+  var head = tree.files.test;
+  for (var i = 0; i < path.length; ++i) {
+    if (typeof head !== 'object' || head.type !== 'dir') {
+      e.ports[0].postMessage({ success: false });
+      return;
+    }
+    head = head.files[path[i]];
+  }
+  if (typeof head !== 'object' || head.type !== 'file') {
+    port.postMessage({ success: false });
+    return;
+  }
+  head.file.async('string').then(function(c) {
+    port.postMessage({ success: true, data: c });
+  }, function(e) {
+    port.postMessage({ success: false });
+  });
+}
+
 // onload
 
 window.addEventListener('load', function() {
@@ -836,13 +833,9 @@ window.addEventListener('load', function() {
   });
 
 
-  // Register a service worker to handle module requests 
+  // Register a service worker to handle module requests
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/worker.js').then(function(registration) {
-      // Registration was successful
-      console.log('ServiceWorker registration successful with scope: ', registration.scope);
-    }, function(err) {
-      // registration failed :(
+    navigator.serviceWorker.register('/worker.js').catch(function(err) {
       console.log('ServiceWorker registration failed: ', err);
     });
   }

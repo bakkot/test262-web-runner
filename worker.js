@@ -12,8 +12,8 @@ self.addEventListener('fetch', function(event) {
         resolve = res; reject = rej;
       });
       setTimeout(() => reject('timed out'), 2000);
-      
-      chan.port1.onmessage = ( e => {
+
+      chan.port1.onmessage = e => {
         if (!e.data.success) {
           reject('not found');
           return;
@@ -27,10 +27,10 @@ self.addEventListener('fetch', function(event) {
             'Content-Type': 'application/javascript',
           }
         }));
-      });
+      };
       client.postMessage(event.request.url, [chan.port2]);
 
-      return rv;
+      return await rv;
     }());
   }
 });
