@@ -131,7 +131,12 @@ function installAPI(global) {
         */
       }
     },
-    global: global
+    global: global,
+    uncallableAndIsHTMLDDA: function() {
+      // Note: this actually does not conform to the description given in INTERPRETING.md, which says it should *not* be callable.
+      // That confuses me, so I'm ignoring it.
+      return global.document.all;
+    }
   };
 }
 
