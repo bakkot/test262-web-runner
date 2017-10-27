@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 // var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
 var zipballUrl = 'tc39-test262-a456b0a.zip';
@@ -369,6 +369,24 @@ function runTest262Test(src, path, pass, fail, skip) {
   if ((includeSrcs + src).match(/\$262\.agent/)) {
     skip('Test runner does not yet support the agent API.'); // and won't until https://github.com/tc39/test262/issues/928 probably
     return;
+  }
+
+  if (window.useTransformer) {
+    if (typeof transform !== 'function') {
+      skip('"transform" does not appear to be a function; did you forget to specify one?');
+      return;
+    }
+    try {
+      var newSrc = transform(src, path.join('/'));
+      if (newSrc == null) {
+        skip('Transformer marked test as skipped');
+        return;
+      }
+    } catch (e) {
+      skip('Transformer threw: ' + e.toString());
+      return;
+    }
+    src = newSrc;
   }
 
   if (meta.flags.module) {
