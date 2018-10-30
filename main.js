@@ -704,19 +704,28 @@ function loadZip(z) {
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
       throw new Error("Doesn't look like a test262 bundle.");
     }
+    var resolve, reject;
+    var renderPromise = new Promise(function(_resolve, _reject) { resolve = _resolve; reject = _reject; });
     var harnessNames = Object.keys(tree.files.harness.files);
     loadAllUnqueued(harnessNames.map(function(include) { return ['harness', include]; }), function(harnessFiles) {
-      for (var i = 0; i < harnessNames.length; ++i) {
-        harness[harnessNames[i]] = harnessFiles[i];
-      }
+      try {
+        for (var i = 0; i < harnessNames.length; ++i) {
+          harness[harnessNames[i]] = harnessFiles[i];
+        }
 
-      var treeEle = document.getElementById('tree');
-      treeEle.textContent = 'Tests:';
-      treeEle.doneCount = 0;
-      treeEle.totalCount = tree.files.test.count;
-      addRunLink(treeEle);
-      renderTree(tree.files.test.files, treeEle, ['test'], false);
-    });
+        var treeEle = document.getElementById('tree');
+        treeEle.textContent = 'Tests:';
+        treeEle.doneCount = 0;
+        treeEle.totalCount = tree.files.test.count;
+        addRunLink(treeEle);
+        renderTree(tree.files.test.files, treeEle, ['test'], false);
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      resolve();
+    }, reject);
+    return renderPromise;
   });
 }
 
