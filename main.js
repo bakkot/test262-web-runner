@@ -767,8 +767,9 @@ window.addEventListener('load', function() {
     loadStatus.innerHTML = 'Reading <kbd>' + safeSrc + '</kbd>...';
     loadStatus.style.display = 'inline-block';
     loadZip(file)
-      .then(function() { buttons.style.display = 'none'; })
-      .catch(function(e) { loadStatus.textContent = e; });
+      .then(function() { loadStatus.innerHTML = 'Loaded <kbd>' + safeSrc + '</kbd>.'; })
+      .catch(function(e) { loadStatus.textContent = e; })
+      .then(function() { fileEle.value = ''; });
   });
 
   document.getElementById('loadLocal').addEventListener('click', function() {
@@ -786,7 +787,7 @@ window.addEventListener('load', function() {
     req.addEventListener('load', function() {
       loadStatus.innerHTML = 'Reading <kbd>' + safeSrc + '</kbd>...';
       loadZip(req.response)
-        .then(function() { buttons.style.display = 'none'; })
+        .then(function() { loadStatus.innerHTML = 'Loaded <kbd>' + safeSrc + '</kbd>.'; })
         .catch(function(e) { loadStatus.textContent = e; });
     });
 
