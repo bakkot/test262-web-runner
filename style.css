@@ -23,6 +23,9 @@
   top: 30px;
   right: 50px;
 }
+#buttons {
+	margin-bottom: 20px;
+}
 #loadStatus {
 	padding-left: 10px;
 }

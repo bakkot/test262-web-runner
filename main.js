@@ -704,19 +704,28 @@ function loadZip(z) {
     if (!tree.files.test || !tree.files.test.type === 'dir' || !tree.files.harness || !tree.files.harness.files['assert.js'] || !tree.files.harness.files['sta.js']) {
       throw new Error("Doesn't look like a test262 bundle.");
     }
+    var resolve, reject;
+    var renderPromise = new Promise(function(_resolve, _reject) { resolve = _resolve; reject = _reject; });
     var harnessNames = Object.keys(tree.files.harness.files);
     loadAllUnqueued(harnessNames.map(function(include) { return ['harness', include]; }), function(harnessFiles) {
-      for (var i = 0; i < harnessNames.length; ++i) {
-        harness[harnessNames[i]] = harnessFiles[i];
-      }
+      try {
+        for (var i = 0; i < harnessNames.length; ++i) {
+          harness[harnessNames[i]] = harnessFiles[i];
+        }
 
-      var treeEle = document.getElementById('tree');
-      treeEle.textContent = 'Tests:';
-      treeEle.doneCount = 0;
-      treeEle.totalCount = tree.files.test.count;
-      addRunLink(treeEle);
-      renderTree(tree.files.test.files, treeEle, ['test'], false);
-    });
+        var treeEle = document.getElementById('tree');
+        treeEle.textContent = 'Tests:';
+        treeEle.doneCount = 0;
+        treeEle.totalCount = tree.files.test.count;
+        addRunLink(treeEle);
+        renderTree(tree.files.test.files, treeEle, ['test'], false);
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      resolve();
+    }, reject);
+    return renderPromise;
   });
 }
 
@@ -756,14 +765,20 @@ window.addEventListener('load', function() {
   fileEle.value = ''; // so that the change event is still fired after reloads
 
   fileEle.addEventListener('change', function() {
-    if (!fileEle.files[0]) {
+    var file = fileEle.files[0];
+    if (!file) {
       return;
     }
+
+    var src = file.name;
+    var safeSrc = src.replace(/</g, '&lt;');
+    document.getElementById('tree').textContent = '';
+    loadStatus.innerHTML = 'Reading <kbd>' + safeSrc + '</kbd>...';
     loadStatus.style.display = 'inline-block';
-    loadStatus.textContent = 'Reading...';
-    loadZip(fileEle.files[0])
-      .then(function() { buttons.style.display = 'none'; })
-      .catch(function(e) { loadStatus.textContent = e; });
+    loadZip(file)
+      .then(function() { loadStatus.innerHTML = 'Loaded <kbd>' + safeSrc + '</kbd>.'; })
+      .catch(function(e) { loadStatus.textContent = e; })
+      .then(function() { fileEle.value = ''; });
   });
 
   document.getElementById('loadLocal').addEventListener('click', function() {
@@ -771,13 +786,17 @@ window.addEventListener('load', function() {
   });
 
   document.getElementById('loadGithub').addEventListener('click', function() {
+    var src = zipballUrl;
+    var safeSrc = src.replace(/</g, '&lt;');
+    document.getElementById('tree').textContent = '';
+    loadStatus.innerHTML = 'Loading <kbd>' + safeSrc + '</kbd>... <span id="loadFraction"></span>';
     loadStatus.style.display = 'inline-block';
     var req = new XMLHttpRequest;
 
     req.addEventListener('load', function() {
-      loadStatus.textContent = 'Reading...';
+      loadStatus.innerHTML = 'Reading <kbd>' + safeSrc + '</kbd>...';
       loadZip(req.response)
-        .then(function() { buttons.style.display = 'none'; })
+        .then(function() { loadStatus.innerHTML = 'Loaded <kbd>' + safeSrc + '</kbd>.'; })
         .catch(function(e) { loadStatus.textContent = e; });
     });
 
