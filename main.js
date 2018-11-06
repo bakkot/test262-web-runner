@@ -207,7 +207,8 @@ function parseFrontmatter(src) {
     if (!phase || !type) return null;
     negative = {phase: phase, type: type};
   }
-  return {includes: includes, flags: flags, negative: negative};
+
+  return {includes: includes, flags: flags, negative: negative, isDynamic: /dynamic-import/.test(frontmatter)}; // lol, do better
 }
 
 var errSigil = {};
@@ -224,12 +225,14 @@ arg looks like this:
   isModule: boolean,
   isAsync: boolean,
   needsAPI: boolean,
-  path: string, // only present for modules
+  path: string,
 }
 
 */
 function runSources(arg, done) {
   var iframe = iframes.pop();
+
+  var path = ['SYNTHETIC'].concat(arg.path);
 
   var listener = function() {
     iframe.removeEventListener('load', listener);
@@ -266,14 +269,11 @@ function runSources(arg, done) {
     script.text = arg.setup;
     w.document.body.appendChild(script);
 
-
-    if (arg.isModule) {
-      w.navigator.serviceWorker.addEventListener('message', messageListener);
-    }
+    w.navigator.serviceWorker.addEventListener('message', messageListener);
 
     script = w.document.createElement('script');
     if (arg.isModule) {
-      script.src = arg.path;
+      script.src = path[path.length - 1];
       script.type = 'module';
     } else {
       script.text = arg.source;
@@ -296,7 +296,7 @@ function runSources(arg, done) {
 
   iframe.addEventListener('load', listener);
 
-  iframe.src = arg.isModule ? 'blank.html' : iframeSrc; // Our service worker can't intercept requests when src = '', sadly.
+  iframe.src = (arg.isDynamic || arg.isModule) ? path.slice(0, path.length - 1).concat(['blank.html']).join('/') : iframeSrc; // Our service worker can't intercept requests when src = '', sadly.
 }
 
 function checkErrorType(errorEvent, global, kind) {
@@ -390,22 +390,22 @@ function runTest262Test(src, path, pass, fail, skip) {
   }
 
   if (meta.flags.module) {
-    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI, path: path.join('/') }, checkErr(meta.negative, pass, fail));
+    runSources({ setup: setup, source: src, isModule: true, isAsync: isAsync, needsAPI: needsAPI, path: path, isDynamic: meta.isDynamic }, checkErr(meta.negative, pass, fail));
     return;
   }
   if (meta.flags.raw) {
     // Note: we cannot assert phase for these, so false positives are possible.
-    runSources({ setup: setup, source: src, isModule: false, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+    runSources({ setup: setup, source: src, isModule: false, isAsync: isAsync, needsAPI: needsAPI, path: path, isDynamic: meta.isDynamic }, checkErr(meta.negative, pass, fail));
     return;
   }
   if (meta.flags.strict) {
-    runSources({ setup: setup, source: meta.flags.strict === 'always' ? strict(src) : src, isModule: false, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+    runSources({ setup: setup, source: meta.flags.strict === 'always' ? strict(src) : src, isModule: false, isAsync: isAsync, needsAPI: needsAPI, path: path, isDynamic: meta.isDynamic }, checkErr(meta.negative, pass, fail));
     return;
   }
 
   // run in both strict and non-strict
-  runSources({ setup: setup, source: strict(src), isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, function() {
-    runSources({ setup: setup, source: src, isModule: false, isAsync: isAsync, needsAPI: needsAPI }, checkErr(meta.negative, pass, fail));
+  runSources({ setup: setup, source: strict(src), isAsync: isAsync, needsAPI: needsAPI, path: path, isDynamic: meta.isDynamic }, checkErr(meta.negative, function() {
+    runSources({ setup: setup, source: src, isModule: false, isAsync: isAsync, needsAPI: needsAPI, path: path, isDynamic: meta.isDynamic }, checkErr(meta.negative, pass, fail));
   }, fail));
 }
 
@@ -754,6 +754,7 @@ function messageListener(e) {
     port.postMessage({ success: false });
   });
 }
+navigator.serviceWorker.addEventListener('message', messageListener);
 
 // onload
 
@@ -866,7 +867,7 @@ window.addEventListener('load', function() {
   }
 
   // Check if the environment reports errors from iframes with src = ''.
-  runSources({ setup: '', source: 'throw new Error;', isModule: false, isAsync: false, needsAPI: false }, function(e) {
+  runSources({ setup: '', source: 'throw new Error;', isModule: false, isAsync: false, needsAPI: false, path: ['test', 'path', 'test.js'] }, function(e) {
     if (e.message.match(/Script error\./i)) {
       iframeSrc = 'blank.html';
     }
