@@ -1,7 +1,8 @@
 'use strict';
 
-// var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
-var zipballUrl = 'tc39-test262-69c1efd.zip';
+// https://docs.github.com/en/rest/reference/repos#download-a-repository-archive
+var zipballUrl = 'https://cors-anywhere.herokuapp.com/api.github.com/repos/tc39/test262/zipball/{}';
+// var zipballUrl = 'https://codeload.github.com/tc39/test262/legacy.zip/{}';
 
 var skippedRegex = /integer-limit/; // todo this should not be here, and should probably be exposed
 
@@ -760,7 +761,6 @@ navigator.serviceWorker.addEventListener('message', messageListener);
 
 window.addEventListener('load', function() {
   var fileEle = document.getElementById('fileLoader');
-  var buttons = document.getElementById('buttons');
   var loadStatus = document.getElementById('loadStatus');
 
   fileEle.value = ''; // so that the change event is still fired after reloads
@@ -787,7 +787,7 @@ window.addEventListener('load', function() {
   });
 
   document.getElementById('loadGithub').addEventListener('click', function() {
-    var src = zipballUrl;
+    var src = zipballUrl.replace('{}', document.getElementById('gitReference').value);
     var safeSrc = src.replace(/</g, '&lt;');
     document.getElementById('tree').textContent = '';
     loadStatus.innerHTML = 'Loading <kbd>' + safeSrc + '</kbd>... <span id="loadFraction"></span>';
@@ -820,7 +820,7 @@ window.addEventListener('load', function() {
       }
     });
 
-    req.open('GET', zipballUrl);
+    req.open('GET', src);
     req.responseType = 'arraybuffer'; // todo check support
     req.send();
   });
