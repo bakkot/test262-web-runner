@@ -6,6 +6,9 @@ Prior to this, it hadn't been possible to run an up-to-date version of test262 i
 
 You can either provide a local .zip of the repo (with or without .git/), or click 'Remote' to load the one hosted in this repository.
 
-The hosted copy was last updated on 05 November, 2018.
+The hosted copy was last updated on 11 March, 2025.
 
 A version allowing preprocessing of tests, intended for tool authors, is available [here](https://bakkot.github.io/test262-web-runner/transformed.html).
+
+Running this locally using cross origin isolation is possible using `python cross-origin-http.py`.  This allows Shared Array Buffer tests to work as expected.
+

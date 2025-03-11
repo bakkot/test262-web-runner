@@ -89,7 +89,11 @@ function loadUnit(path) {
   return function(then, error) {
     return function(task) {
       var file = path.reduce(function(acc, name) { return acc.files[name]; }, tree).file;
-      file.async("string").then(function(c) { then(task, c); }, function(e) { error(task); });
+      if (file) {
+        file.async("string").then(function(c) { then(task, c); }, function(e) { error(task); });
+      } else {
+        then();
+      }
     };
   };
 }
@@ -708,6 +712,9 @@ function loadZip(z) {
     var renderPromise = new Promise(function(_resolve, _reject) { resolve = _resolve; reject = _reject; });
     var harnessNames = Object.keys(tree.files.harness.files);
     loadAllUnqueued(harnessNames.map(function(include) { return ['harness', include]; }), function(harnessFiles) {
+      if (!harnessFiles) {
+        resolve();
+      }
       try {
         for (var i = 0; i < harnessNames.length; ++i) {
           harness[harnessNames[i]] = harnessFiles[i];
@@ -778,7 +785,10 @@ window.addEventListener('load', function() {
     loadStatus.style.display = 'inline-block';
     loadZip(file)
       .then(function() { loadStatus.innerHTML = 'Loaded <kbd>' + safeSrc + '</kbd>.'; })
-      .catch(function(e) { loadStatus.textContent = e; })
+      .catch(function(e) {
+        console.log(e)
+        loadStatus.textContent = e;
+      })
       .then(function() { fileEle.value = ''; });
   });
 
