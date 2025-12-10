@@ -1,7 +1,11 @@
 'use strict';
 
-// var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball'; // this would be nice, but while the API claims to support CORS, it doesn't for this particular endpoint
-var zipballUrl = 'tc39-test262-69c1efd.zip';
+// Direct use of the GitHub URL is blocked by CORS:
+// https://github.com/orgs/community/discussions/45446
+// var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball';
+var zipballUrl = 'https://corsproxy.io/?url=https://api.github.com/repos/tc39/test262/zipball';
+
+var snapshotUrl = 'tc39-test262-69c1efd.zip';
 
 var skippedRegex = /integer-limit/; // todo this should not be here, and should probably be exposed
 
@@ -796,9 +800,16 @@ window.addEventListener('load', function() {
     fileEle.click();
   });
 
-  document.getElementById('loadGithub').addEventListener('click', function() {
-    var src = zipballUrl;
-    var safeSrc = src.replace(/</g, '&lt;');
+  document.getElementById('loadCurrent').addEventListener('click', function() {
+    loadFromUrl(zipballUrl);
+  });
+
+  document.getElementById('loadSnapshot').addEventListener('click', function() {
+    loadFromUrl(snapshotUrl);
+  });
+
+  function loadFromUrl(url) {
+    var safeSrc = url.replace(/</g, '&lt;');
     document.getElementById('tree').textContent = '';
     loadStatus.innerHTML = 'Loading <kbd>' + safeSrc + '</kbd>... <span id="loadFraction"></span>';
     loadStatus.style.display = 'inline-block';
@@ -830,7 +841,7 @@ window.addEventListener('load', function() {
       }
     });
 
-    req.open('GET', zipballUrl);
+    req.open('GET', url);
     req.responseType = 'arraybuffer'; // todo check support
     req.send();
   });
