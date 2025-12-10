@@ -844,7 +844,7 @@ window.addEventListener('load', function() {
     req.open('GET', url);
     req.responseType = 'arraybuffer'; // todo check support
     req.send();
-  });
+  }
 
   document.getElementById('failuresToggle').addEventListener('click', function() {
     var failList = document.getElementById('failList');
