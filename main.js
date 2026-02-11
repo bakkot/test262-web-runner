@@ -3,7 +3,7 @@
 // Direct use of the GitHub URL is blocked by CORS:
 // https://github.com/orgs/community/discussions/45446
 // var zipballUrl = 'https://api.github.com/repos/tc39/test262/zipball';
-var zipballUrl = 'https://corsproxy.io/?url=https://api.github.com/repos/tc39/test262/zipball';
+var zipballUrl = 'https://cors-anywhere.homely8896.workers.dev/https://api.github.com/repos/tc39/test262/zipball';
 
 var snapshotUrl = 'tc39-test262-69c1efd.zip';
 
