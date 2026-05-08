@@ -1,0 +1,75 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '2 3 * * *'
+      timezone: 'America/Los_Angeles'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Check whether test262 has new commits
+        id: check
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -sfL https://api.github.com/repos/tc39/test262/commits/main | jq -r '.sha')
+          CURRENT=$(curl -sfL "${{ steps.pages.outputs.base_url }}/last-commit-sha.txt" 2>/dev/null || true)
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          if [ "$LATEST" != "$CURRENT" ]; then
+            echo "sha_changed=true" >> "$GITHUB_OUTPUT"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "sha_changed=false" >> "$GITHUB_OUTPUT"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download fresh test262.zip from tc39
+        if: steps.check.outputs.sha_changed == 'true'
+        run: curl -sfL "https://github.com/tc39/test262/archive/${{ steps.check.outputs.latest }}.zip" -o test262.zip
+
+      - name: Reuse existing test262.zip from Pages
+        if: steps.check.outputs.deploy == 'true' && steps.check.outputs.sha_changed != 'true'
+        run: curl -sfL "${{ steps.pages.outputs.base_url }}/test262.zip" -o test262.zip
+
+      - name: Stage site
+        if: steps.check.outputs.deploy == 'true'
+        run: |
+          mkdir _site
+          rsync -a --exclude='.*' --exclude='_site' --exclude='test262.zip' ./ _site/
+          mv test262.zip _site/
+          printf '%s' "${{ steps.check.outputs.latest }}" > _site/last-commit-sha.txt
+
+      - name: Upload artifact
+        if: steps.check.outputs.deploy == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - name: Deploy
+        if: steps.check.outputs.deploy == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v5
