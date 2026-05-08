@@ -26,6 +26,13 @@
 #buttons {
 	margin-bottom: 20px;
 }
+#latestSnapshotPopover {
+	position-area: top;
+	border-width: 1px;
+	padding: 3px 1ex;
+	background: cornsilk;
+	font-size: small;
+}
 #loadStatus {
 	padding-left: 10px;
 }

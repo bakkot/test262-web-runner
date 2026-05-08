@@ -40,9 +40,11 @@ jobs:
           if [ "$LATEST" != "$CURRENT" ]; then
             echo "sha_changed=true" >> "$GITHUB_OUTPUT"
             echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$LATEST" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" != "schedule" ]; then
             echo "sha_changed=false" >> "$GITHUB_OUTPUT"
             echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$CURRENT" >> "$GITHUB_OUTPUT"
           else
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
@@ -57,13 +59,15 @@ jobs:
 
       - name: Stage site
         if: steps.check.outputs.deploy == 'true'
+        env:
+          SHA: ${{ steps.check.outputs.sha }}
         run: |
           mkdir _site
           rsync -a --exclude='.*' --exclude='_site' --exclude='test262.zip' ./ _site/
           mv test262.zip _site/
           printf '%s' "${{ steps.check.outputs.latest }}" > _site/last-commit-sha.txt
           TODAY=$(TZ='America/Los_Angeles' date +%Y-%m-%d)
-          sed -i "s/REPLACE_THIS/$TODAY/g" _site/index.html
+          sed -i "s/LATEST_DATE/$TODAY/g; s/HEAD/${SHA/[^0-9a-fA-F]*}/g;" _site/index.html
 
       - name: Upload artifact
         if: steps.check.outputs.deploy == 'true'
