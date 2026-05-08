@@ -62,6 +62,8 @@ jobs:
           rsync -a --exclude='.*' --exclude='_site' --exclude='test262.zip' ./ _site/
           mv test262.zip _site/
           printf '%s' "${{ steps.check.outputs.latest }}" > _site/last-commit-sha.txt
+          TODAY=$(TZ='America/Los_Angeles' date +%Y-%m-%d)
+          sed -i "s/REPLACE_THIS/$TODAY/g" _site/index.html
 
       - name: Upload artifact
         if: steps.check.outputs.deploy == 'true'
