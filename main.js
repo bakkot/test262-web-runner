@@ -895,11 +895,11 @@ window.addEventListener('load', function() {
   });
 
 
-  // Register a service worker to handle module requests
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./worker.js').catch(function(err) {
-      console.log('ServiceWorker registration failed: ', err);
-    });
-  }
-
+  // Register a service worker to handle module requests and COI headers
+  navigator.serviceWorker.register('./worker.js').then(r => {
+    r.addEventListener('updatefound', () => location.reload());
+    if (r.active && !navigator.serviceWorker.controller) location.reload();
+  }).catch((err) => {
+    console.error('ServiceWorker registration failed: ', err);
+  });
 });
