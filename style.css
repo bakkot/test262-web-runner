@@ -34,6 +34,7 @@
 	border-radius: 50%;
 	background: transparent;
 	cursor: pointer;
+	vertical-align: middle;
 }
 #snapshotInterestButton::after {
 	content: '\24D8';
