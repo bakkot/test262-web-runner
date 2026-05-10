@@ -26,6 +26,33 @@
 #buttons {
 	margin-bottom: 20px;
 }
+#loadSnapshot {
+	anchor-name: --loadSnapshot;
+}
+#snapshotInterestButton {
+	border: none;
+	border-radius: 50%;
+	background: transparent;
+	cursor: pointer;
+	vertical-align: middle;
+}
+#snapshotInterestButton::after {
+	content: '\24D8';
+}
+#snapshotInterestButton:hover:not(:active) {
+	opacity: 75%;
+}
+#snapshotInterestButton:active {
+	background-color: color-mix(in lab, currentColor 5%, transparent);
+}
+#latestSnapshotPopover {
+	position-anchor: --loadSnapshot;
+	position-area: top;
+	border-width: 1px;
+	padding: 3px 1ex;
+	background: cornsilk;
+	font-size: small;
+}
 #loadStatus {
 	padding-left: 10px;
 }
